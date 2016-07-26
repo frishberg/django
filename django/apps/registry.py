@@ -2,6 +2,7 @@ import sys
 import threading
 import warnings
 from collections import Counter, OrderedDict, defaultdict
+from functools import partial
 
 from django.core.exceptions import AppRegistryNotReady, ImproperlyConfigured
 from django.utils import lru_cache
@@ -45,8 +46,10 @@ class Apps(object):
         # Lock for thread-safe population.
         self._lock = threading.Lock()
 
-        # Pending lookups for lazy relations.
-        self._pending_lookups = {}
+        # Maps ("app_label", "modelname") tuples to lists of functions to be
+        # called when the corresponding model is ready. Used by this class's
+        # `lazy_model_operation()` and `do_pending_operations()` methods.
+        self._pending_operations = defaultdict(list)
 
         # Populate apps and models, unless it's the master registry.
         if installed_apps is not None:
@@ -144,12 +147,16 @@ class Apps(object):
         try:
             return self.app_configs[app_label]
         except KeyError:
-            raise LookupError("No installed app with label '%s'." % app_label)
+            message = "No installed app with label '%s'." % app_label
+            for app_config in self.get_app_configs():
+                if app_config.name == app_label:
+                    message += " Did you mean '%s'?" % app_config.label
+                    break
+            raise LookupError(message)
 
     # This method is performance-critical at least for Django's test suite.
     @lru_cache.lru_cache(maxsize=None)
-    def get_models(self, include_auto_created=False,
-                   include_deferred=False, include_swapped=False):
+    def get_models(self, include_auto_created=False, include_swapped=False):
         """
         Returns a list of all installed models.
 
@@ -166,8 +173,7 @@ class Apps(object):
 
         result = []
         for app_config in self.app_configs.values():
-            result.extend(list(app_config.get_models(
-                include_auto_created, include_deferred, include_swapped)))
+            result.extend(list(app_config.get_models(include_auto_created, include_swapped)))
         return result
 
     def get_model(self, app_label, model_name=None):
@@ -200,13 +206,14 @@ class Apps(object):
                 warnings.warn(
                     "Model '%s.%s' was already registered. "
                     "Reloading models is not advised as it can lead to inconsistencies, "
-                    "most notably with related models." % (model_name, app_label),
+                    "most notably with related models." % (app_label, model_name),
                     RuntimeWarning, stacklevel=2)
             else:
                 raise RuntimeError(
                     "Conflicting '%s' models in application '%s': %s and %s." %
                     (model_name, app_label, app_models[model_name], model))
         app_models[model_name] = model
+        self.do_pending_operations(model)
         self.clear_cache()
 
     def is_installed(self, app_name):
@@ -251,6 +258,28 @@ class Apps(object):
                 "Model '%s.%s' not registered." % (app_label, model_name))
         return model
 
+    @lru_cache.lru_cache(maxsize=None)
+    def get_swappable_settings_name(self, to_string):
+        """
+        For a given model string (e.g. "auth.User"), return the name of the
+        corresponding settings name if it refers to a swappable model. If the
+        referred model is not swappable, return None.
+
+        This method is decorated with lru_cache because it's performance
+        critical when it comes to migrations. Since the swappable settings don't
+        change after Django has loaded the settings, there is no reason to get
+        the respective settings attribute over and over again.
+        """
+        for model in self.get_models(include_swapped=True):
+            swapped = model._meta.swapped
+            # Is this model swapped out for the model given by to_string?
+            if swapped and swapped == to_string:
+                return model._meta.swappable
+            # Is this model swappable and the one given by to_string?
+            if model._meta.swappable and model._meta.label == to_string:
+                return model._meta.swappable
+        return None
+
     def set_available_apps(self, available):
         """
         Restricts the set of installed apps used by get_app_config[s].
@@ -266,8 +295,10 @@ class Apps(object):
         available = set(available)
         installed = set(app_config.name for app_config in self.get_app_configs())
         if not available.issubset(installed):
-            raise ValueError("Available apps isn't a subset of installed "
-                "apps, extra apps: %s" % ", ".join(available - installed))
+            raise ValueError(
+                "Available apps isn't a subset of installed apps, extra apps: %s"
+                % ", ".join(available - installed)
+            )
 
         self.stored_app_configs.append(self.app_configs)
         self.app_configs = OrderedDict(
@@ -326,8 +357,58 @@ class Apps(object):
         # the relation tree and the fields cache.
         self.get_models.cache_clear()
         if self.ready:
-            for model in self.get_models(include_auto_created=True):
-                model._meta._expire_cache()
+            # Circumvent self.get_models() to prevent that the cache is refilled.
+            # This particularly prevents that an empty value is cached while cloning.
+            for app_config in self.app_configs.values():
+                for model in app_config.get_models(include_auto_created=True):
+                    model._meta._expire_cache()
 
+    def lazy_model_operation(self, function, *model_keys):
+        """
+        Take a function and a number of ("app_label", "modelname") tuples, and
+        when all the corresponding models have been imported and registered,
+        call the function with the model classes as its arguments.
+
+        The function passed to this method must accept exactly n models as
+        arguments, where n=len(model_keys).
+        """
+        # Base case: no arguments, just execute the function.
+        if not model_keys:
+            function()
+        # Recursive case: take the head of model_keys, wait for the
+        # corresponding model class to be imported and registered, then apply
+        # that argument to the supplied function. Pass the resulting partial
+        # to lazy_model_operation() along with the remaining model args and
+        # repeat until all models are loaded and all arguments are applied.
+        else:
+            next_model, more_models = model_keys[0], model_keys[1:]
+
+            # This will be executed after the class corresponding to next_model
+            # has been imported and registered. The `func` attribute provides
+            # duck-type compatibility with partials.
+            def apply_next_model(model):
+                next_function = partial(apply_next_model.func, model)
+                self.lazy_model_operation(next_function, *more_models)
+            apply_next_model.func = function
+
+            # If the model has already been imported and registered, partially
+            # apply it to the function now. If not, add it to the list of
+            # pending operations for the model, where it will be executed with
+            # the model class as its sole argument once the model is ready.
+            try:
+                model_class = self.get_registered_model(*next_model)
+            except LookupError:
+                self._pending_operations[next_model].append(apply_next_model)
+            else:
+                apply_next_model(model_class)
+
+    def do_pending_operations(self, model):
+        """
+        Take a newly-prepared model and pass it to each function waiting for
+        it. This is called at the very end of `Apps.register_model()`.
+        """
+        key = model._meta.app_label, model._meta.model_name
+        for function in self._pending_operations.pop(key, []):
+            function(model)
 
 apps = Apps(installed_apps=None)

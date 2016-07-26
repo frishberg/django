@@ -4,10 +4,10 @@ import time
 import unittest
 
 from django.core.exceptions import ImproperlyConfigured
-from django.core.urlresolvers import resolve
 from django.http import HttpResponse
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.test.utils import require_jinja2
+from django.urls import resolve
 from django.views.generic import RedirectView, TemplateView, View
 
 from . import views
@@ -78,21 +78,15 @@ class ViewTest(unittest.TestCase):
         """
         Test that a view can't be accidentally instantiated before deployment
         """
-        try:
+        with self.assertRaises(AttributeError):
             SimpleView(key='value').as_view()
-            self.fail('Should not be able to instantiate a view')
-        except AttributeError:
-            pass
 
     def test_no_init_args(self):
         """
         Test that a view can't be accidentally instantiated before deployment
         """
-        try:
+        with self.assertRaises(TypeError):
             SimpleView.as_view('value')
-            self.fail('Should not be able to use non-keyword arguments instantiating a view')
-        except TypeError:
-            pass
 
     def test_pathological_http_method(self):
         """
@@ -145,12 +139,14 @@ class ViewTest(unittest.TestCase):
         # Check each of the allowed method names
         for method in SimpleView.http_method_names:
             kwargs = dict(((method, "value"),))
-            self.assertRaises(TypeError, SimpleView.as_view, **kwargs)
+            with self.assertRaises(TypeError):
+                SimpleView.as_view(**kwargs)
 
         # Check the case view argument is ok if predefined on the class...
         CustomizableView.as_view(parameter="value")
         # ...but raises errors otherwise.
-        self.assertRaises(TypeError, CustomizableView.as_view, foobar="value")
+        with self.assertRaises(TypeError):
+            CustomizableView.as_view(foobar="value")
 
     def test_calling_more_than_once(self):
         """
@@ -241,13 +237,12 @@ class ViewTest(unittest.TestCase):
 
 
 @override_settings(ROOT_URLCONF='generic_views.urls')
-class TemplateViewTest(TestCase):
+class TemplateViewTest(SimpleTestCase):
 
     rf = RequestFactory()
 
     def _assert_about(self, response):
         response.render()
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, '<h1>About</h1>')
 
     def test_get(self):
@@ -281,7 +276,8 @@ class TemplateViewTest(TestCase):
         """
         A template view must provide a template name.
         """
-        self.assertRaises(ImproperlyConfigured, self.client.get, '/template/no_template/')
+        with self.assertRaises(ImproperlyConfigured):
+            self.client.get('/template/no_template/')
 
     @require_jinja2
     def test_template_engine(self):
@@ -352,7 +348,7 @@ class TemplateViewTest(TestCase):
 
 
 @override_settings(ROOT_URLCONF='generic_views.urls')
-class RedirectViewTest(TestCase):
+class RedirectViewTest(SimpleTestCase):
 
     rf = RequestFactory()
 
@@ -528,4 +524,5 @@ class SingleObjectTemplateResponseMixinTest(unittest.TestCase):
         TemplateDoesNotExist.
         """
         view = views.TemplateResponseWithoutTemplate()
-        self.assertRaises(ImproperlyConfigured, view.get_template_names)
+        with self.assertRaises(ImproperlyConfigured):
+            view.get_template_names()

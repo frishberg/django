@@ -7,26 +7,28 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 import tempfile as sys_tempfile
 import unittest
+from io import BytesIO
 
 from django.core.files import temp as tempfile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http.multipartparser import MultiPartParser, parse_header
-from django.test import TestCase, client, override_settings
+from django.test import SimpleTestCase, TestCase, client, override_settings
 from django.utils.encoding import force_bytes
 from django.utils.http import urlquote
-from django.utils.six import PY2, BytesIO, StringIO
+from django.utils.six import PY2, StringIO
 
 from . import uploadhandler
 from .models import FileModel
 
 UNICODE_FILENAME = 'test-0123456789_中文_Orléans.jpg'
-MEDIA_ROOT = sys_tempfile.mkdtemp(dir=os.environ['DJANGO_TEST_TEMP_DIR'])
+MEDIA_ROOT = sys_tempfile.mkdtemp()
 UPLOAD_TO = os.path.join(MEDIA_ROOT, 'test_upload')
 
 
-@override_settings(MEDIA_ROOT=MEDIA_ROOT, ROOT_URLCONF='file_uploads.urls', MIDDLEWARE_CLASSES=[])
+@override_settings(MEDIA_ROOT=MEDIA_ROOT, ROOT_URLCONF='file_uploads.urls', MIDDLEWARE=[])
 class FileUploadTests(TestCase):
 
     @classmethod
@@ -50,10 +52,8 @@ class FileUploadTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_large_upload(self):
-        tdir = tempfile.gettempdir()
-
         file = tempfile.NamedTemporaryFile
-        with file(suffix=".file1", dir=tdir) as file1, file(suffix=".file2", dir=tdir) as file2:
+        with file(suffix=".file1") as file1, file(suffix=".file2") as file2:
             file1.write(b'a' * (2 ** 21))
             file1.seek(0)
 
@@ -113,7 +113,7 @@ class FileUploadTests(TestCase):
         tdir = sys_tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tdir, True)
 
-        # This file contains chinese symbols and an accented char in the name.
+        # This file contains Chinese symbols and an accented char in the name.
         with open(os.path.join(tdir, UNICODE_FILENAME), 'w+b') as file1:
             file1.write(b'b' * (2 ** 10))
             file1.seek(0)
@@ -157,14 +157,18 @@ class FileUploadTests(TestCase):
         (#22971).
         """
         payload = client.FakePayload()
-        payload.write('\r\n'.join([
-            '--' + client.BOUNDARY,
-            'Content-Disposition: form-data; name*=UTF-8\'\'file_unicode; filename*=UTF-8\'\'%s' % urlquote(UNICODE_FILENAME),
-            'Content-Type: application/octet-stream',
-            '',
-            'You got pwnd.\r\n',
-            '\r\n--' + client.BOUNDARY + '--\r\n'
-        ]))
+        payload.write(
+            '\r\n'.join([
+                '--' + client.BOUNDARY,
+                'Content-Disposition: form-data; name*=UTF-8\'\'file_unicode; filename*=UTF-8\'\'%s' % urlquote(
+                    UNICODE_FILENAME
+                ),
+                'Content-Type: application/octet-stream',
+                '',
+                'You got pwnd.\r\n',
+                '\r\n--' + client.BOUNDARY + '--\r\n'
+            ])
+        )
 
         r = {
             'CONTENT_LENGTH': len(payload),
@@ -175,6 +179,41 @@ class FileUploadTests(TestCase):
         }
         response = self.client.request(**r)
         self.assertEqual(response.status_code, 200)
+
+    def test_blank_filenames(self):
+        """
+        Receiving file upload when filename is blank (before and after
+        sanitization) should be okay.
+        """
+        # The second value is normalized to an empty name by
+        # MultiPartParser.IE_sanitize()
+        filenames = ['', 'C:\\Windows\\']
+
+        payload = client.FakePayload()
+        for i, name in enumerate(filenames):
+            payload.write('\r\n'.join([
+                '--' + client.BOUNDARY,
+                'Content-Disposition: form-data; name="file%s"; filename="%s"' % (i, name),
+                'Content-Type: application/octet-stream',
+                '',
+                'You got pwnd.\r\n'
+            ]))
+        payload.write('\r\n--' + client.BOUNDARY + '--\r\n')
+
+        r = {
+            'CONTENT_LENGTH': len(payload),
+            'CONTENT_TYPE': client.MULTIPART_CONTENT,
+            'PATH_INFO': '/echo/',
+            'REQUEST_METHOD': 'POST',
+            'wsgi.input': payload,
+        }
+        response = self.client.request(**r)
+        self.assertEqual(response.status_code, 200)
+
+        # Empty filenames should be ignored
+        received = json.loads(response.content.decode('utf-8'))
+        for i, name in enumerate(filenames):
+            self.assertIsNone(received.get('file%s' % i))
 
     def test_dangerous_file_names(self):
         """Uploaded file names should be sanitized before ever reaching the view."""
@@ -262,11 +301,8 @@ class FileUploadTests(TestCase):
                             "Got a long file name (%s characters)." % len(got))
 
     def test_file_content(self):
-        tdir = tempfile.gettempdir()
-
         file = tempfile.NamedTemporaryFile
-        with file(suffix=".ctype_extra", dir=tdir) as no_content_type, \
-                file(suffix=".ctype_extra", dir=tdir) as simple_file:
+        with file(suffix=".ctype_extra") as no_content_type, file(suffix=".ctype_extra") as simple_file:
             no_content_type.write(b'no content')
             no_content_type.seek(0)
 
@@ -291,10 +327,8 @@ class FileUploadTests(TestCase):
 
     def test_content_type_extra(self):
         """Uploaded files may have content type parameters available."""
-        tdir = tempfile.gettempdir()
-
         file = tempfile.NamedTemporaryFile
-        with file(suffix=".ctype_extra", dir=tdir) as no_content_type, file(suffix=".ctype_extra", dir=tdir) as simple_file:
+        with file(suffix=".ctype_extra") as no_content_type, file(suffix=".ctype_extra") as simple_file:
             no_content_type.write(b'something')
             no_content_type.seek(0)
 
@@ -378,12 +412,8 @@ class FileUploadTests(TestCase):
             file.seek(0)
 
             # AttributeError: You cannot alter upload handlers after the upload has been processed.
-            self.assertRaises(
-                AttributeError,
-                self.client.post,
-                '/quota/broken/',
-                {'f': file}
-            )
+            with self.assertRaises(AttributeError):
+                self.client.post('/quota/broken/', {'f': file})
 
     def test_fileupload_getlist(self):
         file = tempfile.NamedTemporaryFile
@@ -516,7 +546,7 @@ class FileUploadTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class DirectoryCreationTests(TestCase):
+class DirectoryCreationTests(SimpleTestCase):
     """
     Tests for error handling during directory creation
     via _save_FIELD_file (ticket #6450)
@@ -535,16 +565,14 @@ class DirectoryCreationTests(TestCase):
     def setUp(self):
         self.obj = FileModel()
 
+    @unittest.skipIf(sys.platform == 'win32', "Python on Windows doesn't have working os.chmod().")
     def test_readonly_root(self):
         """Permission errors are not swallowed"""
         os.chmod(MEDIA_ROOT, 0o500)
         self.addCleanup(os.chmod, MEDIA_ROOT, 0o700)
-        try:
-            self.obj.testfile.save('foo.txt', SimpleUploadedFile('foo.txt', b'x'))
-        except OSError as err:
-            self.assertEqual(err.errno, errno.EACCES)
-        except Exception:
-            self.fail("OSError [Errno %s] not raised." % errno.EACCES)
+        with self.assertRaises(OSError) as cm:
+            self.obj.testfile.save('foo.txt', SimpleUploadedFile('foo.txt', b'x'), save=False)
+        self.assertEqual(cm.exception.errno, errno.EACCES)
 
     def test_not_a_directory(self):
         """The correct IOError is raised when the upload directory name exists but isn't a directory"""
@@ -553,11 +581,10 @@ class DirectoryCreationTests(TestCase):
         self.addCleanup(os.remove, UPLOAD_TO)
         with self.assertRaises(IOError) as exc_info:
             with SimpleUploadedFile('foo.txt', b'x') as file:
-                self.obj.testfile.save('foo.txt', file)
+                self.obj.testfile.save('foo.txt', file, save=False)
         # The test needs to be done on a specific string as IOError
         # is raised even without the patch (just not early enough)
-        self.assertEqual(exc_info.exception.args[0],
-            "%s exists and is not a directory." % UPLOAD_TO)
+        self.assertEqual(exc_info.exception.args[0], "%s exists and is not a directory." % UPLOAD_TO)
 
 
 class MultiParserTests(unittest.TestCase):

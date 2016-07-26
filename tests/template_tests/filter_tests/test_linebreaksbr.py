@@ -16,8 +16,7 @@ class LinebreaksbrTests(SimpleTestCase):
         output = self.engine.render_to_string('linebreaksbr01', {"a": "x&\ny", "b": mark_safe("x&\ny")})
         self.assertEqual(output, "x&amp;<br />y x&<br />y")
 
-    @setup({'linebreaksbr02':
-        '{% autoescape off %}{{ a|linebreaksbr }} {{ b|linebreaksbr }}{% endautoescape %}'})
+    @setup({'linebreaksbr02': '{% autoescape off %}{{ a|linebreaksbr }} {{ b|linebreaksbr }}{% endautoescape %}'})
     def test_linebreaksbr02(self):
         output = self.engine.render_to_string('linebreaksbr02', {"a": "x&\ny", "b": mark_safe("x&\ny")})
         self.assertEqual(output, "x&<br />y x&<br />y")
@@ -36,3 +35,15 @@ class FunctionTests(SimpleTestCase):
 
     def test_non_string_input(self):
         self.assertEqual(linebreaksbr(123), '123')
+
+    def test_autoescape(self):
+        self.assertEqual(
+            linebreaksbr('foo\n<a>bar</a>\nbuz'),
+            'foo<br />&lt;a&gt;bar&lt;/a&gt;<br />buz',
+        )
+
+    def test_autoescape_off(self):
+        self.assertEqual(
+            linebreaksbr('foo\n<a>bar</a>\nbuz', autoescape=False),
+            'foo<br /><a>bar</a><br />buz',
+        )

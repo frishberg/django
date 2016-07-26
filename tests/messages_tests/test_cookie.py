@@ -5,7 +5,7 @@ from django.contrib.messages.storage.base import Message
 from django.contrib.messages.storage.cookie import (
     CookieStorage, MessageDecoder, MessageEncoder,
 )
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, override_settings
 from django.utils.safestring import SafeData, mark_safe
 
 from .base import BaseTests
@@ -43,7 +43,7 @@ def stored_cookie_messages_count(storage, response):
 
 
 @override_settings(SESSION_COOKIE_DOMAIN='.example.com', SESSION_COOKIE_SECURE=True, SESSION_COOKIE_HTTPONLY=True)
-class CookieTest(BaseTests, TestCase):
+class CookieTest(BaseTests, SimpleTestCase):
     storage_class = CookieStorage
 
     def stored_messages_count(self, storage, response):
@@ -70,8 +70,8 @@ class CookieTest(BaseTests, TestCase):
         self.assertIn('test', response.cookies['messages'].value)
         self.assertEqual(response.cookies['messages']['domain'], '.example.com')
         self.assertEqual(response.cookies['messages']['expires'], '')
-        self.assertEqual(response.cookies['messages']['secure'], True)
-        self.assertEqual(response.cookies['messages']['httponly'], True)
+        self.assertIs(response.cookies['messages']['secure'], True)
+        self.assertIs(response.cookies['messages']['httponly'], True)
 
         # Test deletion of the cookie (storing with an empty value) after the messages have been consumed
         storage = self.get_storage()
@@ -127,9 +127,9 @@ class CookieTest(BaseTests, TestCase):
         messages = [
             {
                 'message': Message(constants.INFO, 'Test message'),
-                'message_list': [Message(constants.INFO, 'message %s')
-                                 for x in range(5)] + [{'another-message':
-                                 Message(constants.ERROR, 'error')}],
+                'message_list': [
+                    Message(constants.INFO, 'message %s') for x in range(5)
+                ] + [{'another-message': Message(constants.ERROR, 'error')}],
             },
             Message(constants.INFO, 'message %s'),
         ]

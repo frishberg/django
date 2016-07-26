@@ -3,9 +3,11 @@ from django.contrib.auth.context_processors import PermLookupDict, PermWrapper
 from django.contrib.auth.models import Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.test.utils import ignore_warnings
+from django.utils.deprecation import RemovedInDjango20Warning
 
-from .settings import AUTH_MIDDLEWARE_CLASSES, AUTH_TEMPLATES
+from .settings import AUTH_MIDDLEWARE, AUTH_TEMPLATES
 
 
 class MockUser(object):
@@ -20,7 +22,7 @@ class MockUser(object):
         return False
 
 
-class PermWrapperTests(TestCase):
+class PermWrapperTests(SimpleTestCase):
     """
     Test some details of the PermWrapper implementation.
     """
@@ -57,19 +59,17 @@ class PermWrapperTests(TestCase):
             self.EQLimiterObject() in pldict
 
 
-@override_settings(
-    PASSWORD_HASHERS=['django.contrib.auth.hashers.SHA1PasswordHasher'],
-    ROOT_URLCONF='auth_tests.urls',
-    TEMPLATES=AUTH_TEMPLATES,
-    USE_TZ=False,                           # required for loading the fixture
-)
+@override_settings(ROOT_URLCONF='auth_tests.urls', TEMPLATES=AUTH_TEMPLATES)
 class AuthContextProcessorTests(TestCase):
     """
     Tests for the ``django.contrib.auth.context_processors.auth`` processor
     """
-    fixtures = ['context-processors-users.xml']
 
-    @override_settings(MIDDLEWARE_CLASSES=AUTH_MIDDLEWARE_CLASSES)
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_superuser(username='super', password='secret', email='super@example.com')
+
+    @override_settings(MIDDLEWARE=AUTH_MIDDLEWARE)
     def test_session_not_accessed(self):
         """
         Tests that the session is not accessed simply by including
@@ -78,12 +78,24 @@ class AuthContextProcessorTests(TestCase):
         response = self.client.get('/auth_processor_no_attr_access/')
         self.assertContains(response, "Session not accessed")
 
-    @override_settings(MIDDLEWARE_CLASSES=AUTH_MIDDLEWARE_CLASSES)
+    @ignore_warnings(category=RemovedInDjango20Warning)
+    @override_settings(MIDDLEWARE_CLASSES=AUTH_MIDDLEWARE, MIDDLEWARE=None)
+    def test_session_not_accessed_middleware_classes(self):
+        response = self.client.get('/auth_processor_no_attr_access/')
+        self.assertContains(response, "Session not accessed")
+
+    @override_settings(MIDDLEWARE=AUTH_MIDDLEWARE)
     def test_session_is_accessed(self):
         """
         Tests that the session is accessed if the auth context processor
         is used and relevant attributes accessed.
         """
+        response = self.client.get('/auth_processor_attr_access/')
+        self.assertContains(response, "Session accessed")
+
+    @ignore_warnings(category=RemovedInDjango20Warning)
+    @override_settings(MIDDLEWARE_CLASSES=AUTH_MIDDLEWARE, MIDDLEWARE=None)
+    def test_session_is_accessed_middleware_classes(self):
         response = self.client.get('/auth_processor_attr_access/')
         self.assertContains(response, "Session accessed")
 
@@ -93,7 +105,7 @@ class AuthContextProcessorTests(TestCase):
             Permission.objects.get(
                 content_type=ContentType.objects.get_for_model(Permission),
                 codename='add_permission'))
-        self.client.login(username='normal', password='secret')
+        self.client.force_login(u)
         response = self.client.get('/auth_processor_perms/')
         self.assertContains(response, "Has auth permissions")
         self.assertContains(response, "Has auth.add_permission permissions")
@@ -112,7 +124,7 @@ class AuthContextProcessorTests(TestCase):
         self.assertNotContains(response, "nonexisting")
 
     def test_message_attrs(self):
-        self.client.login(username='super', password='secret')
+        self.client.force_login(self.superuser)
         response = self.client.get('/auth_processor_messages/')
         self.assertContains(response, "Message 1")
 
@@ -127,7 +139,7 @@ class AuthContextProcessorTests(TestCase):
         user = authenticate(username='super', password='secret')
         response = self.client.get('/auth_processor_user/')
         self.assertContains(response, "unicode: super")
-        self.assertContains(response, "id: 100")
+        self.assertContains(response, "id: %d" % self.superuser.pk)
         self.assertContains(response, "username: super")
         # bug #12037 is tested by the {% url %} in the template:
         self.assertContains(response, "url: /userpage/super/")

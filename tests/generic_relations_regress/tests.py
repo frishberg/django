@@ -5,7 +5,7 @@ from django.forms.models import modelform_factory
 from django.test import TestCase, skipIfDBFeature
 
 from .models import (
-    A, B, C, D, Address, Board, CharLink, Company, Contact, Content, Developer,
+    A, Address, B, Board, C, CharLink, Company, Contact, Content, D, Developer,
     Guild, HasLinkThing, Link, Node, Note, OddRelation1, OddRelation2,
     Organization, Person, Place, Related, Restaurant, Tag, Team, TextLink,
 )
@@ -111,19 +111,16 @@ class GenericRelationTests(TestCase):
         # Fails with another, ORM-level error
         dev1 = Developer(name='Joe')
         note = Note(note='Deserves promotion', content_object=dev1)
-        self.assertRaises(IntegrityError, note.save)
+        with self.assertRaises(IntegrityError):
+            note.save()
 
     def test_target_model_len_zero(self):
-        """Test for #13085 -- __len__() returns 0"""
+        """
+        Saving a model with a GenericForeignKey to a model instance whose
+        __len__ method returns 0 (Team.__len__() here) shouldn't fail (#13085).
+        """
         team1 = Team.objects.create(name='Backend devs')
-        try:
-            note = Note(note='Deserve a bonus', content_object=team1)
-        except Exception as e:
-            if (issubclass(type(e), Exception) and
-                    str(e) == 'Impossible arguments to GFK.get_content_type!'):
-                self.fail("Saving model with GenericForeignKey to model instance whose "
-                          "__len__ method returns 0 shouldn't fail.")
-            raise e
+        note = Note(note='Deserve a bonus', content_object=team1)
         note.save()
 
     def test_target_model_nonzero_false(self):
@@ -144,22 +141,26 @@ class GenericRelationTests(TestCase):
         tag.save()
 
     def test_ticket_20378(self):
+        # Create a couple of extra HasLinkThing so that the autopk value
+        # isn't the same for Link and HasLinkThing.
         hs1 = HasLinkThing.objects.create()
         hs2 = HasLinkThing.objects.create()
-        l1 = Link.objects.create(content_object=hs1)
-        l2 = Link.objects.create(content_object=hs2)
+        hs3 = HasLinkThing.objects.create()
+        hs4 = HasLinkThing.objects.create()
+        l1 = Link.objects.create(content_object=hs3)
+        l2 = Link.objects.create(content_object=hs4)
         self.assertQuerysetEqual(
             HasLinkThing.objects.filter(links=l1),
-            [hs1], lambda x: x)
+            [hs3], lambda x: x)
         self.assertQuerysetEqual(
             HasLinkThing.objects.filter(links=l2),
-            [hs2], lambda x: x)
+            [hs4], lambda x: x)
         self.assertQuerysetEqual(
             HasLinkThing.objects.exclude(links=l2),
-            [hs1], lambda x: x)
+            [hs1, hs2, hs3], lambda x: x, ordered=False)
         self.assertQuerysetEqual(
             HasLinkThing.objects.exclude(links=l1),
-            [hs2], lambda x: x)
+            [hs1, hs2, hs4], lambda x: x, ordered=False)
 
     def test_ticket_20564(self):
         b1 = B.objects.create()

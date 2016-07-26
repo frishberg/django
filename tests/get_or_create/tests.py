@@ -1,10 +1,14 @@
 from __future__ import unicode_literals
 
+import time
 import traceback
-from datetime import date
+from datetime import date, datetime, timedelta
+from threading import Thread
 
 from django.db import DatabaseError, IntegrityError
-from django.test import TestCase, TransactionTestCase, ignore_warnings
+from django.test import (
+    TestCase, TransactionTestCase, ignore_warnings, skipUnlessDBFeature,
+)
 from django.utils.encoding import DjangoUnicodeDecodeError
 
 from .models import (
@@ -62,10 +66,8 @@ class GetOrCreateTests(TestCase):
         If you don't specify a value or default value for all required
         fields, you will get an error.
         """
-        self.assertRaises(
-            IntegrityError,
-            Person.objects.get_or_create, first_name="Tom", last_name="Smith"
-        )
+        with self.assertRaises(IntegrityError):
+            Person.objects.get_or_create(first_name="Tom", last_name="Smith")
 
     def test_get_or_create_on_related_manager(self):
         p = Publisher.objects.create(name="Acme Publishing")
@@ -126,6 +128,47 @@ class GetOrCreateTests(TestCase):
         # The publisher should have three books.
         self.assertEqual(p.books.count(), 3)
 
+    def test_defaults_exact(self):
+        """
+        If you have a field named defaults and want to use it as an exact
+        lookup, you need to use 'defaults__exact'.
+        """
+        obj, created = Person.objects.get_or_create(
+            first_name='George', last_name='Harrison', defaults__exact='testing', defaults={
+                'birthday': date(1943, 2, 25),
+                'defaults': 'testing',
+            }
+        )
+        self.assertTrue(created)
+        self.assertEqual(obj.defaults, 'testing')
+        obj2, created = Person.objects.get_or_create(
+            first_name='George', last_name='Harrison', defaults__exact='testing', defaults={
+                'birthday': date(1943, 2, 25),
+                'defaults': 'testing',
+            }
+        )
+        self.assertFalse(created)
+        self.assertEqual(obj, obj2)
+
+    def test_callable_defaults(self):
+        """
+        Callables in `defaults` are evaluated if the instance is created.
+        """
+        obj, created = Person.objects.get_or_create(
+            first_name="George",
+            defaults={"last_name": "Harrison", "birthday": lambda: date(1943, 2, 25)},
+        )
+        self.assertTrue(created)
+        self.assertEqual(date(1943, 2, 25), obj.birthday)
+
+    def test_callable_defaults_not_called(self):
+        def raise_exception():
+            raise AssertionError
+        obj, created = Person.objects.get_or_create(
+            first_name="John", last_name="Lennon",
+            defaults={"birthday": lambda: raise_exception()},
+        )
+
 
 class GetOrCreateTestsWithManualPKs(TestCase):
 
@@ -137,10 +180,8 @@ class GetOrCreateTestsWithManualPKs(TestCase):
         If you specify an existing primary key, but different other fields,
         then you will get an error and data will not be updated.
         """
-        self.assertRaises(
-            IntegrityError,
-            ManualPrimaryKeyTest.objects.get_or_create, id=1, data="Different"
-        )
+        with self.assertRaises(IntegrityError):
+            ManualPrimaryKeyTest.objects.get_or_create(id=1, data="Different")
         self.assertEqual(ManualPrimaryKeyTest.objects.get(id=1).data, "Original")
 
     def test_get_or_create_raises_IntegrityError_plus_traceback(self):
@@ -175,13 +216,10 @@ class GetOrCreateTestsWithManualPKs(TestCase):
 
     def test_get_or_create_empty(self):
         """
-        Regression test for #16137: get_or_create does not require kwargs.
+        If all the attributes on a model have defaults, get_or_create() doesn't
+        require any arguments.
         """
-        try:
-            DefaultPerson.objects.get_or_create()
-        except AssertionError:
-            self.fail("If all the attributes on a model have defaults, we "
-                      "shouldn't need to pass any arguments.")
+        DefaultPerson.objects.get_or_create()
 
 
 class GetOrCreateTransactionTests(TransactionTestCase):
@@ -224,7 +262,8 @@ class GetOrCreateThroughManyToMany(TestCase):
     def test_something(self):
         Tag.objects.create(text='foo')
         a_thing = Thing.objects.create(name='a')
-        self.assertRaises(IntegrityError, a_thing.tags.get_or_create, text='foo')
+        with self.assertRaises(IntegrityError):
+            a_thing.tags.get_or_create(text='foo')
 
 
 class UpdateOrCreateTests(TestCase):
@@ -270,8 +309,8 @@ class UpdateOrCreateTests(TestCase):
         If you don't specify a value or default value for all required
         fields, you will get an error.
         """
-        self.assertRaises(IntegrityError,
-            Person.objects.update_or_create, first_name="Tom", last_name="Smith")
+        with self.assertRaises(IntegrityError):
+            Person.objects.update_or_create(first_name="Tom", last_name="Smith")
 
     def test_manual_primary_key_test(self):
         """
@@ -279,10 +318,8 @@ class UpdateOrCreateTests(TestCase):
         then you will get an error and data will not be updated.
         """
         ManualPrimaryKeyTest.objects.create(id=1, data="Original")
-        self.assertRaises(
-            IntegrityError,
-            ManualPrimaryKeyTest.objects.update_or_create, id=1, data="Different"
-        )
+        with self.assertRaises(IntegrityError):
+            ManualPrimaryKeyTest.objects.update_or_create(id=1, data="Different")
         self.assertEqual(ManualPrimaryKeyTest.objects.get(id=1).data, "Original")
 
     def test_error_contains_full_traceback(self):
@@ -348,3 +385,89 @@ class UpdateOrCreateTests(TestCase):
         self.assertFalse(created)
         self.assertEqual(book.name, name)
         self.assertEqual(author.books.count(), 1)
+
+    def test_defaults_exact(self):
+        """
+        If you have a field named defaults and want to use it as an exact
+        lookup, you need to use 'defaults__exact'.
+        """
+        obj, created = Person.objects.update_or_create(
+            first_name='George', last_name='Harrison', defaults__exact='testing', defaults={
+                'birthday': date(1943, 2, 25),
+                'defaults': 'testing',
+            }
+        )
+        self.assertTrue(created)
+        self.assertEqual(obj.defaults, 'testing')
+        obj, created = Person.objects.update_or_create(
+            first_name='George', last_name='Harrison', defaults__exact='testing', defaults={
+                'birthday': date(1943, 2, 25),
+                'defaults': 'another testing',
+            }
+        )
+        self.assertFalse(created)
+        self.assertEqual(obj.defaults, 'another testing')
+
+    def test_create_callable_default(self):
+        obj, created = Person.objects.update_or_create(
+            first_name='George', last_name='Harrison',
+            defaults={'birthday': lambda: date(1943, 2, 25)},
+        )
+        self.assertIs(created, True)
+        self.assertEqual(obj.birthday, date(1943, 2, 25))
+
+    def test_update_callable_default(self):
+        Person.objects.update_or_create(
+            first_name='George', last_name='Harrison', birthday=date(1942, 2, 25),
+        )
+        obj, created = Person.objects.update_or_create(
+            first_name='George',
+            defaults={'last_name': lambda: 'NotHarrison'},
+        )
+        self.assertIs(created, False)
+        self.assertEqual(obj.last_name, 'NotHarrison')
+
+
+class UpdateOrCreateTransactionTests(TransactionTestCase):
+    available_apps = ['get_or_create']
+
+    @skipUnlessDBFeature('has_select_for_update')
+    @skipUnlessDBFeature('supports_transactions')
+    def test_updates_in_transaction(self):
+        """
+        Objects are selected and updated in a transaction to avoid race
+        conditions. This test forces update_or_create() to hold the lock
+        in another thread for a relatively long time so that it can update
+        while it holds the lock. The updated field isn't a field in 'defaults',
+        so update_or_create() shouldn't have an effect on it.
+        """
+        def birthday_sleep():
+            time.sleep(0.3)
+            return date(1940, 10, 10)
+
+        def update_birthday_slowly():
+            Person.objects.update_or_create(
+                first_name='John', defaults={'birthday': birthday_sleep}
+            )
+
+        Person.objects.create(first_name='John', last_name='Lennon', birthday=date(1940, 10, 9))
+
+        # update_or_create in a separate thread
+        t = Thread(target=update_birthday_slowly)
+        before_start = datetime.now()
+        t.start()
+
+        # Wait for lock to begin
+        time.sleep(0.05)
+
+        # Update during lock
+        Person.objects.filter(first_name='John').update(last_name='NotLennon')
+        after_update = datetime.now()
+
+        # Wait for thread to finish
+        t.join()
+
+        # The update remains and it blocked.
+        updated_person = Person.objects.get(first_name='John')
+        self.assertGreater(after_update - before_start, timedelta(seconds=0.3))
+        self.assertEqual(updated_person.last_name, 'NotLennon')

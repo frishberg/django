@@ -64,13 +64,9 @@ class File(FileProxyMixin):
 
     size = property(_get_size, _set_size)
 
-    def _get_closed(self):
-        return not self.file or self.file.closed
-    closed = property(_get_closed)
-
     def chunks(self, chunk_size=None):
         """
-        Read the file and yield chucks of ``chunk_size`` bytes (defaults to
+        Read the file and yield chunks of ``chunk_size`` bytes (defaults to
         ``UploadedFile.DEFAULT_CHUNK_SIZE``).
         """
         if not chunk_size:
