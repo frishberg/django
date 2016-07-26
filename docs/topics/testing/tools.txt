@@ -1006,12 +1006,10 @@ The most straightforward way of creating a fixture is to use the
 already have some data in your database. See the :djadmin:`dumpdata
 documentation<dumpdata>` for more details.
 
-Create a fixture and place it in a ``fixtures`` directory in one
-of your :setting:`INSTALLED_APPS`. Note that your app must have a ``models.py``.
-Otherwise, you will have to specify the path to your fixtures in
-your :setting:`FIXTURE_DIRS`. Once you have done so, you can use it in your
-unit tests by specifying a ``fixtures`` class attribute on your
-:class:`django.test.TestCase` subclass::
+Once you've created a fixture and placed it in a ``fixtures`` directory in one
+of your :setting:`INSTALLED_APPS`, you can use it in your unit tests by
+specifying a ``fixtures`` class attribute on your :class:`django.test.TestCase`
+subclass::
 
     from django.test import TestCase
     from myapp.models import Animal
