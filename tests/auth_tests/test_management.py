@@ -263,7 +263,7 @@ class CreatesuperuserManagementCommandTestCase(TestCase):
 
     @override_settings(AUTH_USER_MODEL='auth_tests.CustomUser')
     def test_swappable_user(self):
-        "A superuser can be created when a custom User model is in use"
+        "A superuser can be created when a custom user model is in use"
         # We can use the management command to create a superuser
         # We skip validation because the temporary substitution of the
         # swappable User model messes with validation.
@@ -595,16 +595,16 @@ class CreatePermissionsTests(TestCase):
             content_type=permission_content_type,
         ).count(), 1)
 
-    def test_unvailable_models(self):
+    def test_unavailable_models(self):
         """
         #24075 - Permissions shouldn't be created or deleted if the ContentType
         or Permission models aren't available.
         """
         state = migrations.state.ProjectState()
-        # Unvailable contenttypes.ContentType
+        # Unavailable contenttypes.ContentType
         with self.assertNumQueries(0):
             create_permissions(self.app_config, verbosity=0, apps=state.apps)
-        # Unvailable auth.Permission
+        # Unavailable auth.Permission
         state = migrations.state.ProjectState(real_apps=['contenttypes'])
         with self.assertNumQueries(0):
             create_permissions(self.app_config, verbosity=0, apps=state.apps)

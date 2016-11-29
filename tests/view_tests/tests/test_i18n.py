@@ -54,6 +54,23 @@ class I18NTests(TestCase):
         self.assertEqual(response.url, '/')
         self.assertEqual(self.client.session[LANGUAGE_SESSION_KEY], lang_code)
 
+    def test_setlang_http_next(self):
+        """
+        The set_language view only redirects to the 'next' argument if it is
+        "safe" and its scheme is https if the request was sent over https.
+        """
+        lang_code = self._get_inactive_language_code()
+        non_https_next_url = 'http://testserver/redirection/'
+        post_data = dict(language=lang_code, next=non_https_next_url)
+        # Insecure URL in POST data.
+        response = self.client.post('/i18n/setlang/', data=post_data, secure=True)
+        self.assertEqual(response.url, '/')
+        self.assertEqual(self.client.session[LANGUAGE_SESSION_KEY], lang_code)
+        # Insecure URL in HTTP referer.
+        response = self.client.post('/i18n/setlang/', secure=True, HTTP_REFERER=non_https_next_url)
+        self.assertEqual(response.url, '/')
+        self.assertEqual(self.client.session[LANGUAGE_SESSION_KEY], lang_code)
+
     def test_setlang_redirect_to_referer(self):
         """
         The set_language view redirects to the URL in the referer header when
@@ -367,9 +384,21 @@ class JsI18NTestsMultiPackage(SimpleTestCase):
         translations of multiple Python packages is requested. See #13388,
         #3594 and #13514 for more details.
         """
+        base_trans_string = 'il faut traduire cette cha\\u00eene de caract\\u00e8res de '
+        app1_trans_string = base_trans_string + 'app1'
+        app2_trans_string = base_trans_string + 'app2'
         with self.settings(LANGUAGE_CODE='en-us'), override('fr'):
             response = self.client.get('/jsi18n_multi_packages1/')
-            self.assertContains(response, 'il faut traduire cette cha\\u00eene de caract\\u00e8res de app1')
+            self.assertContains(response, app1_trans_string)
+            self.assertContains(response, app2_trans_string)
+
+            response = self.client.get('/jsi18n/app1/')
+            self.assertContains(response, app1_trans_string)
+            self.assertNotContains(response, app2_trans_string)
+
+            response = self.client.get('/jsi18n/app2/')
+            self.assertNotContains(response, app1_trans_string)
+            self.assertContains(response, app2_trans_string)
 
     @modify_settings(INSTALLED_APPS={'append': ['view_tests.app3', 'view_tests.app4']})
     def test_i18n_different_non_english_languages(self):

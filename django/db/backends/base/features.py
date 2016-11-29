@@ -28,7 +28,6 @@ class BaseDatabaseFeatures(object):
     has_bulk_insert = False
     uses_savepoints = False
     can_release_savepoints = False
-    can_combine_inserts_with_and_without_auto_increment_pk = False
 
     # If True, don't use integer foreign keys referring to, e.g., positive
     # integer primary keys.
@@ -36,6 +35,7 @@ class BaseDatabaseFeatures(object):
     allow_sliced_subqueries = True
     has_select_for_update = False
     has_select_for_update_nowait = False
+    has_select_for_update_skip_locked = False
 
     supports_select_related = True
 
@@ -159,6 +159,9 @@ class BaseDatabaseFeatures(object):
     # Can the backend introspect a TimeField, instead of a DateTimeField?
     can_introspect_time_field = True
 
+    # Can the backend introspect the column order (ASC/DESC) for indexes?
+    supports_index_column_ordering = True
+
     # Support for the DISTINCT ON clause
     can_distinct_on_fields = False
 
@@ -221,9 +224,12 @@ class BaseDatabaseFeatures(object):
     # Defaults to False to allow third-party backends to opt-in.
     can_clone_databases = False
 
-    # Does the backend consider quoted identifiers with different casing to
+    # Does the backend consider table names with different casing to
     # be equal?
-    ignores_quoted_identifier_case = False
+    ignores_table_name_case = False
+
+    # Place FOR UPDATE right after FROM clause. Used on MSSQL.
+    for_update_after_from = False
 
     def __init__(self, connection):
         self.connection = connection

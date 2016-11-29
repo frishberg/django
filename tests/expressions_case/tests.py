@@ -275,6 +275,16 @@ class CaseExpressionTests(TestCase):
             [1, 4, 3, 3, 3, 2, 2]
         )
 
+    def test_annotate_with_empty_when(self):
+        objects = CaseTestModel.objects.annotate(
+            selected=Case(
+                When(pk__in=[], then=Value('selected')),
+                default=Value('not selected'), output_field=models.CharField()
+            )
+        )
+        self.assertEqual(len(objects), CaseTestModel.objects.count())
+        self.assertTrue(all(obj.selected == 'not selected' for obj in objects))
+
     def test_combined_expression(self):
         self.assertQuerysetEqual(
             CaseTestModel.objects.annotate(
@@ -1278,4 +1288,18 @@ class CaseDocumentationExamples(TestCase):
                 )),
             ),
             {'regular': 2, 'gold': 1, 'platinum': 3}
+        )
+
+    def test_filter_example(self):
+        a_month_ago = date.today() - timedelta(days=30)
+        a_year_ago = date.today() - timedelta(days=365)
+        self.assertQuerysetEqual(
+            Client.objects.filter(
+                registered_on__lte=Case(
+                    When(account_type=Client.GOLD, then=a_month_ago),
+                    When(account_type=Client.PLATINUM, then=a_year_ago),
+                ),
+            ),
+            [('Jack Black', 'P')],
+            transform=attrgetter('name', 'account_type')
         )

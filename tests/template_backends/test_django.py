@@ -27,11 +27,11 @@ class DjangoTemplatesTests(TemplateStringsTests):
         template = engine.from_string('{{ processors }}')
         request = RequestFactory().get('/')
 
-        # Check that context processors run
+        # Context processors run
         content = template.render({}, request)
         self.assertEqual(content, 'yes')
 
-        # Check that context overrides context processors
+        # Context overrides context processors
         content = template.render({'processors': 'no'}, request)
         self.assertEqual(content, 'no')
 
@@ -130,3 +130,18 @@ class DjangoTemplatesTests(TemplateStringsTests):
             engines['django'].from_string('Hello, {{ name }}').render({'name': 'Bob & Jim'}),
             'Hello, Bob &amp; Jim'
         )
+
+    default_loaders = [
+        'django.template.loaders.filesystem.Loader',
+        'django.template.loaders.app_directories.Loader',
+    ]
+
+    @override_settings(DEBUG=False)
+    def test_non_debug_default_template_loaders(self):
+        engine = DjangoTemplates({'DIRS': [], 'APP_DIRS': True, 'NAME': 'django', 'OPTIONS': {}})
+        self.assertEqual(engine.engine.loaders, [('django.template.loaders.cached.Loader', self.default_loaders)])
+
+    @override_settings(DEBUG=True)
+    def test_debug_default_template_loaders(self):
+        engine = DjangoTemplates({'DIRS': [], 'APP_DIRS': True, 'NAME': 'django', 'OPTIONS': {}})
+        self.assertEqual(engine.engine.loaders, self.default_loaders)

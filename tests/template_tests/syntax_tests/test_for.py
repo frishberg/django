@@ -87,7 +87,7 @@ class ForTagTests(SimpleTestCase):
     @setup({'for-tag-unpack09': '{% for val in items %}{{ val.0 }}:{{ val.1 }}/{% endfor %}'})
     def test_for_tag_unpack09(self):
         """
-        Ensure that a single loopvar doesn't truncate the list in val.
+        A single loopvar doesn't truncate the list in val.
         """
         output = self.engine.render_to_string('for-tag-unpack09', {'items': (('one', 1), ('two', 2))})
         self.assertEqual(output, 'one:1/two:2/')
@@ -125,6 +125,11 @@ class ForTagTests(SimpleTestCase):
         """
         output = self.engine.render_to_string('for-tag-filter-ws', {'s': 'abc'})
         self.assertEqual(output, 'abc')
+
+    @setup({'for-tag-unpack-strs': '{% for x,y in items %}{{ x }}:{{ y }}/{% endfor %}'})
+    def test_for_tag_unpack_strs(self):
+        output = self.engine.render_to_string('for-tag-unpack-strs', {'items': ('ab', 'ac')})
+        self.assertEqual(output, 'a:b/a:c/')
 
     @setup({'for-tag-unpack10': '{% for x,y in items %}{{ x }}:{{ y }}/{% endfor %}'})
     def test_for_tag_unpack10(self):

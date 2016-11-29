@@ -261,12 +261,15 @@ right-hand rule.
 ``GeoHash``
 ===========
 
-.. class:: GeoHash(expression, **extra)
+.. class:: GeoHash(expression, precision=None, **extra)
 
 *Availability*: PostGIS, SpatiaLite (LWGEOM)
 
 Accepts a single geographic field or expression and returns a `GeoHash`__
 representation of the geometry.
+
+The ``precision`` keyword argument controls the number of characters in the
+result.
 
 .. versionchanged:: 1.10
 
@@ -295,10 +298,14 @@ intersection between them.
 
 .. versionadded:: 1.10
 
-*Availability*: PostGIS
+*Availability*: PostGIS, SpatiaLite (LWGEOM)
 
 Accepts a geographic field or expression and tests if the value is well formed.
 Returns ``True`` if its value is a valid geometry and ``False`` otherwise.
+
+.. versionchanged:: 1.11
+
+    SpatiaLite support was added.
 
 ``Length``
 ==========
@@ -324,12 +331,16 @@ resource-intensive) with the ``spheroid`` keyword argument.
 
 .. versionadded:: 1.10
 
-*Availability*: PostGIS
+*Availability*: PostGIS, SpatiaLite (LWGEOM)
 
 Accepts a geographic field or expression and attempts to convert the value into
 a valid geometry without losing any of the input vertices. Geometries that are
 already valid are returned without changes. Simple polygons might become a
 multipolygon and the result might be of lower dimension than the input.
+
+.. versionchanged:: 1.11
+
+    SpatiaLite support was added.
 
 ``MemSize``
 ===========

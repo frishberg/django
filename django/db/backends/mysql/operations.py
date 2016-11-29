@@ -24,7 +24,13 @@ class DatabaseOperations(BaseDatabaseOperations):
             # DAYOFWEEK() returns an integer, 1-7, Sunday=1.
             # Note: WEEKDAY() returns 0-6, Monday=0.
             return "DAYOFWEEK(%s)" % field_name
+        elif lookup_type == 'week':
+            # Override the value of default_week_format for consistency with
+            # other database backends.
+            # Mode 3: Monday, 1-53, with 4 or more days this year.
+            return "WEEK(%s, 3)" % field_name
         else:
+            # EXTRACT returns 1-53 based on ISO-8601 for the week number.
             return "EXTRACT(%s FROM %s)" % (lookup_type.upper(), field_name)
 
     def date_trunc_sql(self, lookup_type, field_name):
@@ -88,17 +94,13 @@ class DatabaseOperations(BaseDatabaseOperations):
             return "TIME(%s)" % (field_name)
 
     def date_interval_sql(self, timedelta):
-        return "INTERVAL '%d 0:0:%d:%d' DAY_MICROSECOND" % (
-            timedelta.days, timedelta.seconds, timedelta.microseconds), []
+        return "INTERVAL '%06f' SECOND_MICROSECOND" % (timedelta.total_seconds()), []
 
     def format_for_duration_arithmetic(self, sql):
         if self.connection.features.supports_microsecond_precision:
             return 'INTERVAL %s MICROSECOND' % sql
         else:
             return 'INTERVAL FLOOR(%s / 1000000) SECOND' % sql
-
-    def drop_foreignkey_sql(self):
-        return "DROP FOREIGN KEY"
 
     def force_no_ordering(self):
         """
@@ -158,6 +160,10 @@ class DatabaseOperations(BaseDatabaseOperations):
         if value is None:
             return None
 
+        # Expression values are adapted by the database.
+        if hasattr(value, 'resolve_expression'):
+            return value
+
         # MySQL doesn't support tz-aware datetimes
         if timezone.is_aware(value):
             if settings.USE_TZ:
@@ -173,6 +179,10 @@ class DatabaseOperations(BaseDatabaseOperations):
     def adapt_timefield_value(self, value):
         if value is None:
             return None
+
+        # Expression values are adapted by the database.
+        if hasattr(value, 'resolve_expression'):
+            return value
 
         # MySQL doesn't support tz-aware times
         if timezone.is_aware(value):

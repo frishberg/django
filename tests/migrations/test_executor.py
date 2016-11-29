@@ -133,7 +133,7 @@ class ExecutorTests(MigrationTestBase):
     })
     def test_empty_plan(self):
         """
-        Tests that re-planning a full migration of a fully-migrated set doesn't
+        Re-planning a full migration of a fully-migrated set doesn't
         perform spurious unmigrations and remigrations.
 
         There was previously a bug where the executor just always performed the
@@ -168,6 +168,14 @@ class ExecutorTests(MigrationTestBase):
             ("migrations2", "0001_initial"),
         ])
         self.assertEqual(plan, [])
+        # The resulting state should include applied migrations.
+        state = executor.migrate([
+            ("migrations", "0002_second"),
+            ("migrations2", "0001_initial"),
+        ])
+        self.assertIn(('migrations', 'book'), state.models)
+        self.assertIn(('migrations', 'author'), state.models)
+        self.assertIn(('migrations2', 'otherauthor'), state.models)
         # Erase all the fake records
         executor.recorder.record_unapplied("migrations2", "0001_initial")
         executor.recorder.record_unapplied("migrations", "0002_second")
@@ -396,7 +404,7 @@ class ExecutorTests(MigrationTestBase):
     )
     def test_unrelated_model_lookups_forwards(self):
         """
-        #24123 - Tests that all models of apps already applied which are
+        #24123 - All models of apps already applied which are
         unrelated to the first app being applied are part of the initial model
         state.
         """
@@ -441,7 +449,7 @@ class ExecutorTests(MigrationTestBase):
     )
     def test_unrelated_model_lookups_backwards(self):
         """
-        #24123 - Tests that all models of apps being unapplied which are
+        #24123 - All models of apps being unapplied which are
         unrelated to the first app being unapplied are part of the initial
         model state.
         """
@@ -678,7 +686,7 @@ class ExecutorUnitTests(TestCase):
         self.assertEqual(plan, [(a2_impl, True)])
 
     def test_minimize_rollbacks_branchy(self):
-        """
+        r"""
         Minimize rollbacks when target has multiple in-app children.
 
         a: 1 <---- 3 <--\
@@ -723,7 +731,7 @@ class ExecutorUnitTests(TestCase):
         self.assertEqual(plan, exp)
 
     def test_backwards_nothing_to_do(self):
-        """
+        r"""
         If the current state satisfies the given target, do nothing.
 
         a: 1 <--- 2

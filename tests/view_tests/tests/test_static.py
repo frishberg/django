@@ -108,6 +108,10 @@ class StaticTests(SimpleTestCase):
         response = self.client.get('/%s/non_existing_resource' % self.prefix)
         self.assertEqual(404, response.status_code)
 
+    def test_index(self):
+        response = self.client.get('/%s/' % self.prefix)
+        self.assertContains(response, 'Index of /')
+
 
 class StaticHelperTest(StaticTests):
     """
@@ -126,8 +130,7 @@ class StaticHelperTest(StaticTests):
 class StaticUtilsTests(unittest.TestCase):
     def test_was_modified_since_fp(self):
         """
-        Test that a floating point mtime does not disturb was_modified_since.
-        (#18675)
+        A floating point mtime does not disturb was_modified_since (#18675).
         """
         mtime = 1343416141.107817
         header = http_date(mtime)

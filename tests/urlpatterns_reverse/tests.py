@@ -6,6 +6,7 @@ from __future__ import unicode_literals
 
 import sys
 import threading
+import unittest
 
 from admin_scripts.tests import AdminScriptTestCase
 
@@ -362,12 +363,10 @@ class ResolverTests(SimpleTestCase):
 
     def test_non_regex(self):
         """
-        Verifies that we raise a Resolver404 if what we are resolving doesn't
-        meet the basic requirements of a path to match - i.e., at the very
-        least, it matches the root pattern '^/'. We must never return None
-        from resolve, or we will get a TypeError further down the line.
-
-        Regression for #10834.
+        A Resolver404 is raised if resolving doesn't meet the basic
+        requirements of a path to match - i.e., at the very least, it matches
+        the root pattern '^/'. Never return None from resolve() to prevent a
+        TypeError from occuring later (#10834).
         """
         with self.assertRaises(Resolver404):
             resolve('')
@@ -380,9 +379,9 @@ class ResolverTests(SimpleTestCase):
 
     def test_404_tried_urls_have_names(self):
         """
-        Verifies that the list of URLs that come back from a Resolver404
-        exception contains a list in the right format for printing out in
-        the DEBUG 404 page with both the patterns and URL names, if available.
+        The list of URLs that come back from a Resolver404 exception contains
+        a list in the right format for printing out in the DEBUG 404 page with
+        both the patterns and URL names, if available.
         """
         urls = 'urlpatterns_reverse.named_urls'
         # this list matches the expected URL types and names returned when
@@ -430,6 +429,13 @@ class ResolverTests(SimpleTestCase):
         self.assertTrue(resolver._is_callback('urlpatterns_reverse.nested_urls.View3'))
         self.assertFalse(resolver._is_callback('urlpatterns_reverse.nested_urls.blub'))
 
+    @unittest.skipIf(six.PY2, "Python 2 doesn't support __qualname__.")
+    def test_view_detail_as_method(self):
+        # Views which have a class name as part of their path.
+        resolver = get_resolver('urlpatterns_reverse.method_view_urls')
+        self.assertTrue(resolver._is_callback('urlpatterns_reverse.method_view_urls.ViewContainer.method_view'))
+        self.assertTrue(resolver._is_callback('urlpatterns_reverse.method_view_urls.ViewContainer.classmethod_view'))
+
     def test_populate_concurrency(self):
         """
         RegexURLResolver._populate() can be called concurrently, but not more
@@ -472,7 +478,7 @@ class ReverseLazyTest(TestCase):
 
 class ReverseLazySettingsTest(AdminScriptTestCase):
     """
-    Test that reverse_lazy can be used in settings without causing a circular
+    reverse_lazy can be used in settings without causing a circular
     import error.
     """
     def setUp(self):

@@ -24,7 +24,7 @@ from django.utils.six.moves.urllib.parse import (
 )
 
 RAISE_ERROR = object()
-host_validation_re = re.compile(r"^([a-z0-9.-]+|\[[a-f0-9]*:[a-f0-9:]+\])(:\d+)?$")
+host_validation_re = re.compile(r"^([a-z0-9.-]+|\[[a-f0-9]*:[a-f0-9\.:]+\])(:\d+)?$")
 
 
 class UnreadablePostError(IOError):
@@ -96,12 +96,13 @@ class HttpRequest(object):
         """Return the HTTP host using the environment or request headers."""
         host = self._get_raw_host()
 
-        # There is no hostname validation when DEBUG=True
-        if settings.DEBUG:
-            return host
+        # Allow variants of localhost if ALLOWED_HOSTS is empty and DEBUG=True.
+        allowed_hosts = settings.ALLOWED_HOSTS
+        if settings.DEBUG and not allowed_hosts:
+            allowed_hosts = ['localhost', '127.0.0.1', '[::1]']
 
         domain, port = split_domain_port(host)
-        if domain and validate_host(domain, settings.ALLOWED_HOSTS):
+        if domain and validate_host(domain, allowed_hosts):
             return host
         else:
             msg = "Invalid HTTP_HOST header: %r." % host
@@ -225,8 +226,8 @@ class HttpRequest(object):
         next access (so that it is decoded correctly).
         """
         self._encoding = val
-        if hasattr(self, '_get'):
-            del self._get
+        if hasattr(self, 'GET'):
+            del self.GET
         if hasattr(self, '_post'):
             del self._post
 
@@ -264,7 +265,7 @@ class HttpRequest(object):
 
             # Limit the maximum request data size that will be handled in-memory.
             if (settings.DATA_UPLOAD_MAX_MEMORY_SIZE is not None and
-                    int(self.META.get('CONTENT_LENGTH', 0)) > settings.DATA_UPLOAD_MAX_MEMORY_SIZE):
+                    int(self.META.get('CONTENT_LENGTH') or 0) > settings.DATA_UPLOAD_MAX_MEMORY_SIZE):
                 raise RequestDataTooBig('Request body exceeded settings.DATA_UPLOAD_MAX_MEMORY_SIZE.')
 
             try:
@@ -521,7 +522,7 @@ class QueryDict(MultiValueDict):
 
 
 # It's neither necessary nor appropriate to use
-# django.utils.encoding.smart_text for parsing URLs and form inputs. Thus,
+# django.utils.encoding.force_text for parsing URLs and form inputs. Thus,
 # this slightly more restricted function, used by QueryDict.
 def bytes_to_text(s, encoding):
     """

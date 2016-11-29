@@ -1,11 +1,13 @@
+import io
 import os
 import sys
 import warnings
 from itertools import takewhile
 
 from django.apps import apps
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connections
+from django.db import DEFAULT_DB_ALIAS, connections, router
 from django.db.migrations import Migration
 from django.db.migrations.autodetector import MigrationAutodetector
 from django.db.migrations.loader import MigrationLoader
@@ -94,8 +96,18 @@ class Command(BaseCommand):
         loader = MigrationLoader(None, ignore_no_migrations=True)
 
         # Raise an error if any migrations are applied before their dependencies.
-        for db in connections:
-            loader.check_consistent_history(connections[db])
+        consistency_check_labels = set(config.label for config in apps.get_app_configs())
+        # Non-default databases are only checked if database routers used.
+        aliases_to_check = connections if settings.DATABASE_ROUTERS else [DEFAULT_DB_ALIAS]
+        for alias in sorted(aliases_to_check):
+            connection = connections[alias]
+            if (connection.settings_dict['ENGINE'] != 'django.db.backends.dummy' and any(
+                    # At least one model must be migrated to the database.
+                    router.allow_migrate(connection.alias, app_label, model_name=model._meta.object_name)
+                    for app_label in consistency_check_labels
+                    for model in apps.get_app_config(app_label).get_models()
+            )):
+                loader.check_consistent_history(connection)
 
         # Before anything else, see if there's conflicting apps and drop out
         # hard if there are any and they don't want to merge
@@ -196,7 +208,10 @@ class Command(BaseCommand):
                 if self.verbosity >= 1:
                     # Display a relative path if it's below the current working
                     # directory, or an absolute path otherwise.
-                    migration_string = os.path.relpath(writer.path)
+                    try:
+                        migration_string = os.path.relpath(writer.path)
+                    except ValueError:
+                        migration_string = writer.path
                     if migration_string.startswith('..'):
                         migration_string = writer.path
                     self.stdout.write("  %s:\n" % (self.style.MIGRATE_LABEL(migration_string),))
@@ -214,7 +229,7 @@ class Command(BaseCommand):
                         # We just do this once per app
                         directory_created[app_label] = True
                     migration_string = writer.as_string()
-                    with open(writer.path, "wb") as fh:
+                    with io.open(writer.path, "w", encoding='utf-8') as fh:
                         fh.write(migration_string)
                 elif self.verbosity == 3:
                     # Alternatively, makemigrations --dry-run --verbosity 3
@@ -293,7 +308,7 @@ class Command(BaseCommand):
 
                 if not self.dry_run:
                     # Write the merge migrations file to the disk
-                    with open(writer.path, "wb") as fh:
+                    with io.open(writer.path, "w", encoding='utf-8') as fh:
                         fh.write(writer.as_string())
                     if self.verbosity > 0:
                         self.stdout.write("\nCreated new merge migration %s" % writer.path)

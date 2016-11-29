@@ -1,5 +1,6 @@
 import json
 
+from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.db.models.lookups import (
     DistanceLookupBase, gis_lookups,
 )
@@ -98,11 +99,12 @@ class RasterFieldTest(TransactionTestCase):
         # Confirm raster has been transformed to the default srid
         self.assertEqual(r.rast.srs.srid, 4326)
         # Confirm geotransform is in lat/lon
-        self.assertEqual(
-            r.rast.geotransform,
-            [-87.9298551266551, 9.459646421449934e-06, 0.0,
-             23.94249275457565, 0.0, -9.459646421449934e-06]
-        )
+        expected = [
+            -87.9298551266551, 9.459646421449934e-06, 0.0, 23.94249275457565,
+            0.0, -9.459646421449934e-06,
+        ]
+        for val, exp in zip(r.rast.geotransform, expected):
+            self.assertAlmostEqual(exp, val)
 
     def test_verbose_name_arg(self):
         """
@@ -326,3 +328,18 @@ class RasterFieldTest(TransactionTestCase):
         msg = "Couldn't create spatial object from lookup value '%s'." % obj
         with self.assertRaisesMessage(ValueError, msg):
             RasterModel.objects.filter(geom__intersects=obj)
+
+    def test_db_function_errors(self):
+        """
+        Errors are raised when using DB functions with raster content.
+        """
+        point = GEOSGeometry("SRID=3086;POINT (-697024.9213808845 683729.1705516104)")
+        rast = GDALRaster(json.loads(JSON_RASTER))
+        msg = "Please provide a geometry object."
+        with self.assertRaisesMessage(TypeError, msg):
+            RasterModel.objects.annotate(distance_from_point=Distance("geom", rast))
+        with self.assertRaisesMessage(TypeError, msg):
+            RasterModel.objects.annotate(distance_from_point=Distance("rastprojected", rast))
+        msg = "Geometry functions not supported for raster fields."
+        with self.assertRaisesMessage(TypeError, msg):
+            RasterModel.objects.annotate(distance_from_point=Distance("rastprojected", point)).count()

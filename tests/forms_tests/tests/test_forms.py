@@ -8,7 +8,7 @@ import uuid
 
 from django.core.exceptions import NON_FIELD_ERRORS
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.validators import RegexValidator
+from django.core.validators import MaxValueValidator, RegexValidator
 from django.forms import (
     BooleanField, CharField, CheckboxSelectMultiple, ChoiceField, DateField,
     DateTimeField, EmailField, FileField, FloatField, Form, HiddenInput,
@@ -39,6 +39,11 @@ class PersonNew(Form):
     first_name = CharField(widget=TextInput(attrs={'id': 'first_name_id'}))
     last_name = CharField()
     birthday = DateField()
+
+
+class MultiValueDictLike(dict):
+    def getlist(self, key):
+        return [self[key]]
 
 
 class FormsTestCase(SimpleTestCase):
@@ -423,19 +428,19 @@ class FormsTestCase(SimpleTestCase):
         self.assertHTMLEqual(str(f['email']), '<input type="email" name="email" value="test@example.com" required />')
         self.assertHTMLEqual(
             str(f['get_spam']),
-            '<input checked="checked" type="checkbox" name="get_spam" required />',
+            '<input checked type="checkbox" name="get_spam" required />',
         )
 
         # 'True' or 'true' should be rendered without a value attribute
         f = SignupForm({'email': 'test@example.com', 'get_spam': 'True'}, auto_id=False)
         self.assertHTMLEqual(
             str(f['get_spam']),
-            '<input checked="checked" type="checkbox" name="get_spam" required />',
+            '<input checked type="checkbox" name="get_spam" required />',
         )
 
         f = SignupForm({'email': 'test@example.com', 'get_spam': 'true'}, auto_id=False)
         self.assertHTMLEqual(
-            str(f['get_spam']), '<input checked="checked" type="checkbox" name="get_spam" required />')
+            str(f['get_spam']), '<input checked type="checkbox" name="get_spam" required />')
 
         # A value of 'False' or 'false' should be rendered unchecked
         f = SignupForm({'email': 'test@example.com', 'get_spam': 'False'}, auto_id=False)
@@ -503,19 +508,19 @@ class FormsTestCase(SimpleTestCase):
 </select>""")
         f = FrameworkForm({'name': 'Django', 'language': 'P'}, auto_id=False)
         self.assertHTMLEqual(str(f['language']), """<select name="language" required>
-<option value="P" selected="selected">Python</option>
+<option value="P" selected>Python</option>
 <option value="J">Java</option>
 </select>""")
 
         # A subtlety: If one of the choices' value is the empty string and the form is
-        # unbound, then the <option> for the empty-string choice will get selected="selected".
+        # unbound, then the <option> for the empty-string choice will get selected.
         class FrameworkForm(Form):
             name = CharField()
             language = ChoiceField(choices=[('', '------'), ('P', 'Python'), ('J', 'Java')])
 
         f = FrameworkForm(auto_id=False)
         self.assertHTMLEqual(str(f['language']), """<select name="language" required>
-<option value="" selected="selected">------</option>
+<option value="" selected>------</option>
 <option value="P">Python</option>
 <option value="J">Java</option>
 </select>""")
@@ -532,7 +537,7 @@ class FormsTestCase(SimpleTestCase):
 </select>""")
         f = FrameworkForm({'name': 'Django', 'language': 'P'}, auto_id=False)
         self.assertHTMLEqual(str(f['language']), """<select class="foo" name="language" required>
-<option value="P" selected="selected">Python</option>
+<option value="P" selected>Python</option>
 <option value="J">Java</option>
 </select>""")
 
@@ -553,7 +558,7 @@ class FormsTestCase(SimpleTestCase):
 </select>""")
         f = FrameworkForm({'name': 'Django', 'language': 'P'}, auto_id=False)
         self.assertHTMLEqual(str(f['language']), """<select class="foo" name="language" required>
-<option value="P" selected="selected">Python</option>
+<option value="P" selected>Python</option>
 <option value="J">Java</option>
 </select>""")
 
@@ -646,9 +651,9 @@ Java</label></li>
         self.assertHTMLEqual(
             t.render(Context({'form': f})),
             """<div class="myradio"><label for="id_language_0">
-<input id="id_language_0" name="language" type="radio" value="P" /> Python</label></div>
+<input id="id_language_0" name="language" type="radio" value="P" required /> Python</label></div>
 <div class="myradio"><label for="id_language_1">
-<input id="id_language_1" name="language" type="radio" value="J" /> Java</label></div>"""
+<input id="id_language_1" name="language" type="radio" value="J" required /> Java</label></div>"""
         )
 
     def test_form_with_iterable_boundfield(self):
@@ -661,17 +666,17 @@ Java</label></li>
         f = BeatleForm(auto_id=False)
         self.assertHTMLEqual(
             '\n'.join(str(bf) for bf in f['name']),
-            """<label><input type="radio" name="name" value="john" /> John</label>
-<label><input type="radio" name="name" value="paul" /> Paul</label>
-<label><input type="radio" name="name" value="george" /> George</label>
-<label><input type="radio" name="name" value="ringo" /> Ringo</label>"""
+            """<label><input type="radio" name="name" value="john" required /> John</label>
+<label><input type="radio" name="name" value="paul" required /> Paul</label>
+<label><input type="radio" name="name" value="george" required /> George</label>
+<label><input type="radio" name="name" value="ringo" required /> Ringo</label>"""
         )
         self.assertHTMLEqual(
             '\n'.join('<div>%s</div>' % bf for bf in f['name']),
-            """<div><label><input type="radio" name="name" value="john" /> John</label></div>
-<div><label><input type="radio" name="name" value="paul" /> Paul</label></div>
-<div><label><input type="radio" name="name" value="george" /> George</label></div>
-<div><label><input type="radio" name="name" value="ringo" /> Ringo</label></div>"""
+            """<div><label><input type="radio" name="name" value="john" required /> John</label></div>
+<div><label><input type="radio" name="name" value="paul" required /> Paul</label></div>
+<div><label><input type="radio" name="name" value="george" required /> George</label></div>
+<div><label><input type="radio" name="name" value="ringo" required /> Ringo</label></div>"""
         )
 
     def test_form_with_noniterable_boundfield(self):
@@ -680,7 +685,7 @@ Java</label></li>
             name = CharField()
 
         f = BeatleForm(auto_id=False)
-        self.assertHTMLEqual('\n'.join(str(bf) for bf in f['name']), '<input type="text" name="name" />')
+        self.assertHTMLEqual('\n'.join(str(bf) for bf in f['name']), '<input type="text" name="name" required />')
 
     def test_boundfield_slice(self):
         class BeatleForm(Form):
@@ -719,7 +724,7 @@ Java</label></li>
         self.assertHTMLEqual(str(f['name']), '<input type="text" name="name" value="Yesterday" required />')
         self.assertHTMLEqual(str(f['composers']), """<select multiple="multiple" name="composers" required>
 <option value="J">John Lennon</option>
-<option value="P" selected="selected">Paul McCartney</option>
+<option value="P" selected>Paul McCartney</option>
 </select>""")
 
     def test_form_with_disabled_fields(self):
@@ -803,25 +808,25 @@ Java</label></li>
 
         f = SongForm(auto_id=False)
         self.assertHTMLEqual(str(f['composers']), """<ul>
-<li><label><input type="checkbox" name="composers" value="J" required /> John Lennon</label></li>
-<li><label><input type="checkbox" name="composers" value="P" required /> Paul McCartney</label></li>
+<li><label><input type="checkbox" name="composers" value="J" /> John Lennon</label></li>
+<li><label><input type="checkbox" name="composers" value="P" /> Paul McCartney</label></li>
 </ul>""")
         f = SongForm({'composers': ['J']}, auto_id=False)
         self.assertHTMLEqual(str(f['composers']), """<ul>
-<li><label><input checked="checked" type="checkbox" name="composers" value="J" required /> John Lennon</label></li>
-<li><label><input type="checkbox" name="composers" value="P" required /> Paul McCartney</label></li>
+<li><label><input checked type="checkbox" name="composers" value="J" /> John Lennon</label></li>
+<li><label><input type="checkbox" name="composers" value="P" /> Paul McCartney</label></li>
 </ul>""")
         f = SongForm({'composers': ['J', 'P']}, auto_id=False)
         self.assertHTMLEqual(str(f['composers']), """<ul>
-<li><label><input checked="checked" type="checkbox" name="composers" value="J" required /> John Lennon</label></li>
-<li><label><input checked="checked" type="checkbox" name="composers" value="P" required /> Paul McCartney</label></li>
+<li><label><input checked type="checkbox" name="composers" value="J" /> John Lennon</label></li>
+<li><label><input checked type="checkbox" name="composers" value="P" /> Paul McCartney</label></li>
 </ul>""")
         # Test iterating on individual checkboxes in a template
         t = Template('{% for checkbox in form.composers %}<div class="mycheckbox">{{ checkbox }}</div>{% endfor %}')
         self.assertHTMLEqual(t.render(Context({'form': f})), """<div class="mycheckbox"><label>
-<input checked="checked" name="composers" type="checkbox" value="J" /> John Lennon</label></div>
+<input checked name="composers" type="checkbox" value="J" /> John Lennon</label></div>
 <div class="mycheckbox"><label>
-<input checked="checked" name="composers" type="checkbox" value="P" /> Paul McCartney</label></div>""")
+<input checked name="composers" type="checkbox" value="P" /> Paul McCartney</label></div>""")
 
     def test_checkbox_auto_id(self):
         # Regarding auto_id, CheckboxSelectMultiple is a special case. Each checkbox
@@ -839,9 +844,9 @@ Java</label></li>
             str(f['composers']),
             """<ul id="composers_id">
 <li><label for="composers_id_0">
-<input type="checkbox" name="composers" value="J" id="composers_id_0" required /> John Lennon</label></li>
+<input type="checkbox" name="composers" value="J" id="composers_id_0" /> John Lennon</label></li>
 <li><label for="composers_id_1">
-<input type="checkbox" name="composers" value="P" id="composers_id_1" required /> Paul McCartney</label></li>
+<input type="checkbox" name="composers" value="P" id="composers_id_1" /> Paul McCartney</label></li>
 </ul>"""
         )
 
@@ -866,6 +871,12 @@ Java</label></li>
         data = MultiValueDict(dict(name=['Yesterday'], composers=['J', 'P']))
         f = SongForm(data)
         self.assertEqual(f.errors, {})
+
+        # SelectMultiple uses ducktyping so that MultiValueDictLike.getlist()
+        # is called.
+        f = SongForm(MultiValueDictLike({'name': 'Yesterday', 'composers': 'J'}))
+        self.assertEqual(f.errors, {})
+        self.assertEqual(f.cleaned_data['composers'], ['J'])
 
     def test_multiple_hidden(self):
         class SongForm(Form):
@@ -903,6 +914,12 @@ Java</label></li>
         self.assertEqual(f.errors, {})
         self.assertEqual(f.cleaned_data['composers'], ['J', 'P'])
         self.assertEqual(f.cleaned_data['name'], 'Yesterday')
+
+        # MultipleHiddenInput uses ducktyping so that
+        # MultiValueDictLike.getlist() is called.
+        f = SongForm(MultiValueDictLike({'name': 'Yesterday', 'composers': 'J'}))
+        self.assertEqual(f.errors, {})
+        self.assertEqual(f.cleaned_data['composers'], ['J'])
 
     def test_escaping(self):
         # Validation errors are HTML-escaped when output as HTML.
@@ -1117,7 +1134,7 @@ value="Should escape &lt; &amp; &gt; and &lt;script&gt;alert(&#39;xss&#39;)&lt;/
                 except ValidationError as e:
                     self._errors = e.update_error_dict(self._errors)
 
-                # Ensure that the newly added list of errors is an instance of ErrorList.
+                # The newly added list of errors is an instance of ErrorList.
                 for field, error_list in self._errors.items():
                     if not isinstance(error_list, self.error_class):
                         self._errors[field] = self.error_class(error_list)
@@ -1126,7 +1143,7 @@ value="Should escape &lt; &amp; &gt; and &lt;script&gt;alert(&#39;xss&#39;)&lt;/
         # Trigger validation.
         self.assertFalse(form.is_valid())
 
-        # Check that update_error_dict didn't lose track of the ErrorDict type.
+        # update_error_dict didn't lose track of the ErrorDict type.
         self.assertIsInstance(form._errors, forms.ErrorDict)
 
         self.assertEqual(dict(form.errors), {
@@ -1308,10 +1325,10 @@ value="Should escape &lt; &amp; &gt; and &lt;script&gt;alert(&#39;xss&#39;)&lt;/
         self.assertEqual(f['gender'].field.choices, [('f', 'Female'), ('m', 'Male')])
 
     def test_validators_independence(self):
-        """ Test that we are able to modify a form field validators list without polluting
-            other forms """
-        from django.core.validators import MaxValueValidator
-
+        """
+        The list of form field validators can be modified without polluting
+        other forms.
+        """
         class MyForm(Form):
             myfield = CharField(max_length=25)
 
@@ -1797,8 +1814,8 @@ Password: <input type="password" name="password" required /></li>"""
             """<li>Username: <input type="text" name="username" value="django" maxlength="10" required /></li>
 <li>Password: <input type="password" name="password" required /></li>
 <li>Options: <select multiple="multiple" name="options" required>
-<option value="f" selected="selected">foo</option>
-<option value="b" selected="selected">bar</option>
+<option value="f" selected>foo</option>
+<option value="b" selected>bar</option>
 <option value="w">whiz</option>
 </select></li>"""
         )
@@ -1841,8 +1858,8 @@ Options: <select multiple="multiple" name="options" required>
 <li><ul class="errorlist"><li>This field is required.</li></ul>
 Password: <input type="password" name="password" required /></li>
 <li>Options: <select multiple="multiple" name="options" required>
-<option value="f" selected="selected">foo</option>
-<option value="b" selected="selected">bar</option>
+<option value="f" selected>foo</option>
+<option value="b" selected>bar</option>
 <option value="w">whiz</option>
 </select></li>"""
         )
@@ -1871,8 +1888,8 @@ Password: <input type="password" name="password" required /></li>
 <li>Password: <input type="password" name="password" required /></li>
 <li>Options: <select multiple="multiple" name="options" required>
 <option value="f">foo</option>
-<option value="b" selected="selected">bar</option>
-<option value="w" selected="selected">whiz</option>
+<option value="b" selected>bar</option>
+<option value="w" selected>whiz</option>
 </select></li>"""
         )
         p = UserRegistration(initial={'username': initial_stephane, 'options': initial_options}, auto_id=False)
@@ -1881,11 +1898,26 @@ Password: <input type="password" name="password" required /></li>
             """<li>Username: <input type="text" name="username" value="stephane" maxlength="10" required /></li>
 <li>Password: <input type="password" name="password" required /></li>
 <li>Options: <select multiple="multiple" name="options" required>
-<option value="f" selected="selected">foo</option>
-<option value="b" selected="selected">bar</option>
+<option value="f" selected>foo</option>
+<option value="b" selected>bar</option>
 <option value="w">whiz</option>
 </select></li>"""
         )
+
+    def test_get_initial_for_field(self):
+        class PersonForm(Form):
+            first_name = CharField(initial='John')
+            last_name = CharField(initial='Doe')
+            age = IntegerField()
+            occupation = CharField(initial=lambda: 'Unknown')
+
+        form = PersonForm(initial={'first_name': 'Jane'})
+        self.assertEqual(form.get_initial_for_field(form.fields['age'], 'age'), None)
+        self.assertEqual(form.get_initial_for_field(form.fields['last_name'], 'last_name'), 'Doe')
+        # Form.initial overrides Field.initial.
+        self.assertEqual(form.get_initial_for_field(form.fields['first_name'], 'first_name'), 'Jane')
+        # Callables are evaluated.
+        self.assertEqual(form.get_initial_for_field(form.fields['occupation'], 'occupation'), 'Unknown')
 
     def test_changed_data(self):
         class Person(Form):
@@ -1899,7 +1931,7 @@ Password: <input type="password" name="password" required /></li>
         self.assertIn('last_name', p.changed_data)
         self.assertNotIn('birthday', p.changed_data)
 
-        # Test that field raising ValidationError is always in changed_data
+        # A field raising ValidationError is always in changed_data
         class PedanticField(forms.Field):
             def to_python(self, value):
                 raise ValidationError('Whatever')
@@ -1943,9 +1975,22 @@ Password: <input type="password" name="password" required /></li>
         # BoundField is also cached
         self.assertIs(form['name'], name)
 
+    def test_boundfield_value_disabled_callable_initial(self):
+        class PersonForm(Form):
+            name = CharField(initial=lambda: 'John Doe', disabled=True)
+
+        # Without form data.
+        form = PersonForm()
+        self.assertEqual(form['name'].value(), 'John Doe')
+
+        # With form data. As the field is disabled, the value should not be
+        # affected by the form data.
+        form = PersonForm({})
+        self.assertEqual(form['name'].value(), 'John Doe')
+
     def test_boundfield_rendering(self):
         """
-        Python 2 issue: Test that rendering a BoundField with bytestring content
+        Python 2 issue: Rendering a BoundField with bytestring content
         doesn't lose it's safe string status (#22950).
         """
         class CustomWidget(TextInput):
@@ -2003,6 +2048,23 @@ Password: <input type="password" name="password" required /></li>
         self.assertEqual(unbound['hi_default_microsec'].value(), now)
         self.assertEqual(unbound['hi_without_microsec'].value(), now_no_ms)
         self.assertEqual(unbound['ti_without_microsec'].value(), now_no_ms)
+
+    def test_datetime_clean_initial_callable_disabled(self):
+        now = datetime.datetime(2006, 10, 25, 14, 30, 45, 123456)
+
+        class DateTimeForm(forms.Form):
+            dt = DateTimeField(initial=lambda: now, disabled=True)
+
+        form = DateTimeForm({})
+        self.assertEqual(form.errors, {})
+        self.assertEqual(form.cleaned_data, {'dt': now})
+
+    def test_datetime_changed_data_callable_with_microseconds(self):
+        class DateTimeForm(forms.Form):
+            dt = DateTimeField(initial=lambda: datetime.datetime(2006, 10, 25, 14, 30, 45, 123456), disabled=True)
+
+        form = DateTimeForm({'dt': '2006-10-25 14:30:45'})
+        self.assertEqual(form.changed_data, [])
 
     def test_help_text(self):
         # You can specify descriptive text for a field by using the 'help_text' argument)
@@ -2257,39 +2319,39 @@ Password: <input type="password" name="password" required />
 
         p = Person({'name': 'Joe'}, auto_id=False)
         self.assertHTMLEqual(str(p['is_cool']), """<select name="is_cool" required>
-<option value="1" selected="selected">Unknown</option>
+<option value="1" selected>Unknown</option>
 <option value="2">Yes</option>
 <option value="3">No</option>
 </select>""")
         p = Person({'name': 'Joe', 'is_cool': '1'}, auto_id=False)
         self.assertHTMLEqual(str(p['is_cool']), """<select name="is_cool" required>
-<option value="1" selected="selected">Unknown</option>
+<option value="1" selected>Unknown</option>
 <option value="2">Yes</option>
 <option value="3">No</option>
 </select>""")
         p = Person({'name': 'Joe', 'is_cool': '2'}, auto_id=False)
         self.assertHTMLEqual(str(p['is_cool']), """<select name="is_cool" required>
 <option value="1">Unknown</option>
-<option value="2" selected="selected">Yes</option>
+<option value="2" selected>Yes</option>
 <option value="3">No</option>
 </select>""")
         p = Person({'name': 'Joe', 'is_cool': '3'}, auto_id=False)
         self.assertHTMLEqual(str(p['is_cool']), """<select name="is_cool" required>
 <option value="1">Unknown</option>
 <option value="2">Yes</option>
-<option value="3" selected="selected">No</option>
+<option value="3" selected>No</option>
 </select>""")
         p = Person({'name': 'Joe', 'is_cool': True}, auto_id=False)
         self.assertHTMLEqual(str(p['is_cool']), """<select name="is_cool" required>
 <option value="1">Unknown</option>
-<option value="2" selected="selected">Yes</option>
+<option value="2" selected>Yes</option>
 <option value="3">No</option>
 </select>""")
         p = Person({'name': 'Joe', 'is_cool': False}, auto_id=False)
         self.assertHTMLEqual(str(p['is_cool']), """<select name="is_cool" required>
 <option value="1">Unknown</option>
 <option value="2">Yes</option>
-<option value="3" selected="selected">No</option>
+<option value="3" selected>No</option>
 </select>""")
 
     def test_forms_with_file_fields(self):
@@ -2342,6 +2404,23 @@ Password: <input type="password" name="password" required />
             f.as_table(),
             '<tr><th>File1:</th><td><input type="file" name="file1" required /></td></tr>',
         )
+
+        # A required file field with initial data should not contain the
+        # required HTML attribute. The file input is left blank by the user to
+        # keep the existing, initial value.
+        f = FileForm(initial={'file1': 'resume.txt'}, auto_id=False)
+        self.assertHTMLEqual(
+            f.as_table(),
+            '<tr><th>File1:</th><td><input type="file" name="file1" /></td></tr>',
+        )
+
+    def test_filefield_initial_callable(self):
+        class FileForm(forms.Form):
+            file1 = forms.FileField(initial=lambda: 'resume.txt')
+
+        f = FileForm({})
+        self.assertEqual(f.errors, {})
+        self.assertEqual(f.cleaned_data['file1'], 'resume.txt')
 
     def test_basic_processing_in_view(self):
         class UserRegistration(Form):
@@ -2636,7 +2715,7 @@ Good luck picking a username that doesn&#39;t already exist.</p>
 <label class="required" for="id_name">Name:</label> <input type="text" name="name" id="id_name" required /></li>
 <li class="required"><label class="required" for="id_is_cool">Is cool:</label>
 <select name="is_cool" id="id_is_cool" required>
-<option value="1" selected="selected">Unknown</option>
+<option value="1" selected>Unknown</option>
 <option value="2">Yes</option>
 <option value="3">No</option>
 </select></li>
@@ -2652,7 +2731,7 @@ Good luck picking a username that doesn&#39;t already exist.</p>
 <input type="text" name="name" id="id_name" required /></p>
 <p class="required"><label class="required" for="id_is_cool">Is cool:</label>
 <select name="is_cool" id="id_is_cool" required>
-<option value="1" selected="selected">Unknown</option>
+<option value="1" selected>Unknown</option>
 <option value="2">Yes</option>
 <option value="3">No</option>
 </select></p>
@@ -2670,7 +2749,7 @@ Good luck picking a username that doesn&#39;t already exist.</p>
 <input type="text" name="name" id="id_name" required /></td></tr>
 <tr class="required"><th><label class="required" for="id_is_cool">Is cool:</label></th>
 <td><select name="is_cool" id="id_is_cool" required>
-<option value="1" selected="selected">Unknown</option>
+<option value="1" selected>Unknown</option>
 <option value="2">Yes</option>
 <option value="3">No</option>
 </select></td></tr>
@@ -2835,7 +2914,7 @@ Good luck picking a username that doesn&#39;t already exist.</p>
         self.assertEqual('+61.287654321 ext. 123 (label: )', f.clean(['+61', '287654321', '123']))
         six.assertRaisesRegex(
             self, ValidationError,
-            "'Enter a complete value\.', u?'Enter an extension\.'", f.clean, ['', '', '', 'Home']
+            r"'Enter a complete value\.', u?'Enter an extension\.'", f.clean, ['', '', '', 'Home']
         )
         with self.assertRaisesMessage(ValidationError, "'Enter a valid country code.'"):
             f.clean(['61', '287654321', '123', 'Home'])
@@ -2851,14 +2930,14 @@ Good luck picking a username that doesn&#39;t already exist.</p>
         self.assertEqual('+61.287654321 ext. 123 (label: )', f.clean(['+61', '287654321', '123']))
         six.assertRaisesRegex(
             self, ValidationError,
-            "'Enter a complete value\.', u?'Enter an extension\.'", f.clean, ['', '', '', 'Home']
+            r"'Enter a complete value\.', u?'Enter an extension\.'", f.clean, ['', '', '', 'Home']
         )
         with self.assertRaisesMessage(ValidationError, "'Enter a valid country code.'"):
             f.clean(['61', '287654321', '123', 'Home'])
 
     def test_custom_empty_values(self):
         """
-        Test that form fields can customize what is considered as an empty value
+        Form fields can customize what is considered as an empty value
         for themselves (#19997).
         """
         class CustomJSONField(CharField):
@@ -3470,3 +3549,30 @@ Good luck picking a username that doesn&#39;t already exist.</p>
             '<option value="J">Java</option>'
             '</select></td></tr>',
         )
+
+    def test_only_hidden_fields(self):
+        # A form with *only* hidden fields that has errors is going to be very unusual.
+        class HiddenForm(Form):
+            data = IntegerField(widget=HiddenInput)
+
+        f = HiddenForm({})
+        self.assertHTMLEqual(
+            f.as_p(),
+            '<ul class="errorlist nonfield">'
+            '<li>(Hidden field data) This field is required.</li></ul>\n<p> '
+            '<input type="hidden" name="data" id="id_data" /></p>'
+        )
+        self.assertHTMLEqual(
+            f.as_table(),
+            '<tr><td colspan="2"><ul class="errorlist nonfield">'
+            '<li>(Hidden field data) This field is required.</li></ul>'
+            '<input type="hidden" name="data" id="id_data" /></td></tr>'
+        )
+
+    def test_field_named_data(self):
+        class DataForm(Form):
+            data = CharField(max_length=10)
+
+        f = DataForm({'data': 'xyzzy'})
+        self.assertTrue(f.is_valid())
+        self.assertEqual(f.cleaned_data, {'data': 'xyzzy'})

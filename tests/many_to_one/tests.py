@@ -183,7 +183,7 @@ class ManyToOneTests(TestCase):
             Article.objects.filter(reporter__first_name__exact='John'),
             ["<Article: John's second story>", "<Article: This is a test>"]
         )
-        # Check that implied __exact also works
+        # Implied __exact also works
         self.assertQuerysetEqual(
             Article.objects.filter(reporter__first_name='John'),
             ["<Article: John's second story>", "<Article: This is a test>"]
@@ -314,7 +314,7 @@ class ManyToOneTests(TestCase):
         )
         self.assertQuerysetEqual(Reporter.objects.filter(article__reporter__exact=self.r).distinct(), john_smith)
 
-        # Check that implied __exact also works.
+        # Implied __exact also works.
         self.assertQuerysetEqual(Reporter.objects.filter(article__reporter=self.r).distinct(), john_smith)
 
         # It's possible to use values() calls across many-to-one relations.
@@ -327,8 +327,8 @@ class ManyToOneTests(TestCase):
         self.assertEqual([d], list(qs))
 
     def test_select_related(self):
-        # Check that Article.objects.select_related().dates() works properly when
-        # there are multiple Articles with the same date but different foreign-key
+        # Article.objects.select_related().dates() works properly when there
+        # are multiple Articles with the same date but different foreign-key
         # objects (Reporters).
         r1 = Reporter.objects.create(first_name='Mike', last_name='Royko', email='royko@suntimes.com')
         r2 = Reporter.objects.create(first_name='John', last_name='Kass', email='jkass@tribune.com')
@@ -567,7 +567,7 @@ class ManyToOneTests(TestCase):
         self.assertEqual('id', cat.remote_field.get_related_field().name)
 
     def test_relation_unsaved(self):
-        # Test that the <field>_set manager does not join on Null value fields (#17541)
+        # The <field>_set manager does not join on Null value fields (#17541)
         Third.objects.create(name='Third 1')
         Third.objects.create(name='Third 2')
         th = Third(name="testing")
@@ -624,3 +624,48 @@ class ManyToOneTests(TestCase):
         # doesn't exist should be an instance of a subclass of `AttributeError`
         # refs #21563
         self.assertFalse(hasattr(Article(), 'reporter'))
+
+    def test_clear_after_prefetch(self):
+        c = City.objects.create(name='Musical City')
+        District.objects.create(name='Ladida', city=c)
+        city = City.objects.prefetch_related('districts').get(id=c.id)
+        self.assertQuerysetEqual(city.districts.all(), ['<District: Ladida>'])
+        city.districts.clear()
+        self.assertQuerysetEqual(city.districts.all(), [])
+
+    def test_remove_after_prefetch(self):
+        c = City.objects.create(name='Musical City')
+        d = District.objects.create(name='Ladida', city=c)
+        city = City.objects.prefetch_related('districts').get(id=c.id)
+        self.assertQuerysetEqual(city.districts.all(), ['<District: Ladida>'])
+        city.districts.remove(d)
+        self.assertQuerysetEqual(city.districts.all(), [])
+
+    def test_add_after_prefetch(self):
+        c = City.objects.create(name='Musical City')
+        District.objects.create(name='Ladida', city=c)
+        d2 = District.objects.create(name='Ladidu')
+        city = City.objects.prefetch_related('districts').get(id=c.id)
+        self.assertEqual(city.districts.count(), 1)
+        city.districts.add(d2)
+        self.assertEqual(city.districts.count(), 2)
+
+    def test_set_after_prefetch(self):
+        c = City.objects.create(name='Musical City')
+        District.objects.create(name='Ladida', city=c)
+        d2 = District.objects.create(name='Ladidu')
+        city = City.objects.prefetch_related('districts').get(id=c.id)
+        self.assertEqual(city.districts.count(), 1)
+        city.districts.set([d2])
+        self.assertQuerysetEqual(city.districts.all(), ['<District: Ladidu>'])
+
+    def test_add_then_remove_after_prefetch(self):
+        c = City.objects.create(name='Musical City')
+        District.objects.create(name='Ladida', city=c)
+        d2 = District.objects.create(name='Ladidu')
+        city = City.objects.prefetch_related('districts').get(id=c.id)
+        self.assertEqual(city.districts.count(), 1)
+        city.districts.add(d2)
+        self.assertEqual(city.districts.count(), 2)
+        city.districts.remove(d2)
+        self.assertEqual(city.districts.count(), 1)

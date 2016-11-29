@@ -3,10 +3,11 @@ from __future__ import unicode_literals
 
 import warnings
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user, get_user_model
 from django.contrib.auth.models import AnonymousUser, User
 from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError
+from django.http import HttpRequest
 from django.test import TestCase, override_settings
 from django.utils import translation
 
@@ -15,7 +16,7 @@ from .models import CustomUser
 
 class BasicTestCase(TestCase):
     def test_user(self):
-        "Check that users can be created and can set their password"
+        "Users can be created and can set their password"
         u = User.objects.create_user('testuser', 'test@example.com', 'testpw')
         self.assertTrue(u.has_usable_password())
         self.assertFalse(u.check_password('bad'))
@@ -76,7 +77,7 @@ class BasicTestCase(TestCase):
             self.assertEqual(str(warns[0].message), deprecation_message)
 
     def test_user_no_email(self):
-        "Check that users can be created without an email"
+        "Users can be created without an email"
         u = User.objects.create_user('testuser1')
         self.assertEqual(u.email, '')
 
@@ -158,3 +159,21 @@ class BasicTestCase(TestCase):
         with translation.override('es'):
             self.assertEqual(User._meta.verbose_name, 'usuario')
             self.assertEqual(User._meta.verbose_name_plural, 'usuarios')
+
+
+class TestGetUser(TestCase):
+
+    def test_get_user_anonymous(self):
+        request = HttpRequest()
+        request.session = self.client.session
+        user = get_user(request)
+        self.assertIsInstance(user, AnonymousUser)
+
+    def test_get_user(self):
+        created_user = User.objects.create_user('testuser', 'test@example.com', 'testpw')
+        self.client.login(username='testuser', password='testpw')
+        request = HttpRequest()
+        request.session = self.client.session
+        user = get_user(request)
+        self.assertIsInstance(user, User)
+        self.assertEqual(user.username, created_user.username)

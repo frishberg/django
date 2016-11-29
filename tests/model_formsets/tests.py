@@ -485,8 +485,9 @@ class ModelFormsetTest(TestCase):
         self.assertEqual(poet2.name, 'Vladimir Mayakovsky')
 
     def test_custom_form(self):
-        """ Test that model_formset respects fields and exclude parameters of
-            custom form
+        """
+        model_formset_factory() respects fields and exclude parameters of a
+        custom form.
         """
         class PostForm1(forms.ModelForm):
             class Meta:
@@ -508,8 +509,7 @@ class ModelFormsetTest(TestCase):
 
     def test_custom_queryset_init(self):
         """
-        Test that a queryset can be overridden in the __init__ method.
-        https://docs.djangoproject.com/en/dev/topics/forms/modelforms/#changing-the-queryset
+        A queryset can be overridden in the formset's __init__() method.
         """
         Author.objects.create(name='Charles Baudelaire')
         Author.objects.create(name='Paul Verlaine')
@@ -1134,7 +1134,7 @@ class ModelFormsetTest(TestCase):
             formset.forms[0].as_p(),
             '<p><label for="id_form-0-owner">Owner:</label>'
             '<select name="form-0-owner" id="id_form-0-owner">'
-            '<option value="" selected="selected">---------</option>'
+            '<option value="" selected>---------</option>'
             '<option value="%d">Joe Perry at Giordanos</option>'
             '<option value="%d">Jack Berry at Giordanos</option>'
             '</select></p>'
@@ -1461,7 +1461,7 @@ class ModelFormsetTest(TestCase):
         # a formset for a Model that has a custom primary key that still needs to be
         # added to the formset automatically
         FormSet = modelformset_factory(ClassyMexicanRestaurant, fields=["tacos_are_yummy"])
-        self.assertEqual(sorted(FormSet().forms[0].fields.keys()), ['restaurant', 'tacos_are_yummy'])
+        self.assertEqual(sorted(FormSet().forms[0].fields.keys()), ['tacos_are_yummy', 'the_restaurant'])
 
     def test_model_formset_with_initial_model_instance(self):
         # has_changed should compare model instance and primary key

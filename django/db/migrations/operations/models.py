@@ -109,7 +109,10 @@ class CreateModel(ModelOperation):
             return True
 
         # Check we didn't inherit from the model
-        models_to_check = [base for base in self.bases if base is not models.Model]
+        models_to_check = [
+            base for base in self.bases
+            if base is not models.Model and isinstance(base, (models.base.ModelBase, six.string_types))
+        ]
         # Check we have no FKs/M2Ms with it
         for fname, field in self.fields:
             if field.remote_field:
@@ -275,6 +278,11 @@ class RenameModel(ModelOperation):
         )
 
     def state_forwards(self, app_label, state):
+        # In cases where state doesn't have rendered apps, prevent subsequent
+        # reload_model() calls from rendering models for performance
+        # reasons. This method should be refactored to avoid relying on
+        # state.apps (#27310).
+        reset_apps = 'apps' not in state.__dict__
         apps = state.apps
         model = apps.get_model(app_label, self.old_name)
         model._meta.apps = apps
@@ -283,6 +291,8 @@ class RenameModel(ModelOperation):
             f for f in model._meta.get_fields(include_hidden=True)
             if f.auto_created and not f.concrete and (not f.hidden or f.many_to_many)
         )
+        if reset_apps:
+            del state.__dict__['apps']
         # Rename the model
         state.models[app_label, self.new_name_lower] = state.models[app_label, self.old_name_lower]
         state.models[app_label, self.new_name_lower].name = self.new_name
@@ -465,7 +475,10 @@ class AlterModelTable(ModelOperation):
         return self.database_forwards(app_label, schema_editor, from_state, to_state)
 
     def describe(self):
-        return "Rename table for %s to %s" % (self.name, self.table)
+        return "Rename table for %s to %s" % (
+            self.name,
+            self.table if self.table is not None else "(default)"
+        )
 
     def reduce(self, operation, in_between, app_label=None):
         if isinstance(operation, (AlterModelTable, DeleteModel)) and self.name_lower == operation.name_lower:
@@ -759,7 +772,7 @@ class AddIndex(IndexOperation):
 
     def __init__(self, model_name, index):
         self.model_name = model_name
-        if not index._name:
+        if not index.name:
             raise ValueError(
                 "Indexes passed to AddIndex operations require a name "
                 "argument. %r doesn't have one." % index
@@ -792,7 +805,8 @@ class AddIndex(IndexOperation):
         )
 
     def describe(self):
-        return 'Create index on field(s) %s of model %s' % (
+        return 'Create index %s on field(s) %s of model %s' % (
+            self.index.name,
             ', '.join(self.index.fields),
             self.model_name,
         )

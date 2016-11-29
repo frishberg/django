@@ -22,6 +22,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.six import StringIO
 
+from .forms import MediaActionForm
 from .models import (
     Actor, AdminOrderedAdminMethod, AdminOrderedCallable, AdminOrderedField,
     AdminOrderedModelMethod, Album, Answer, Article, BarAccount, Book,
@@ -53,6 +54,8 @@ def callable_year(dt_value):
         return dt_value.year
     except AttributeError:
         return None
+
+
 callable_year.admin_order_field = 'date'
 
 
@@ -107,7 +110,6 @@ class ArticleAdmin(admin.ModelAdmin):
     )
 
     def changelist_view(self, request):
-        "Test that extra_context works"
         return super(ArticleAdmin, self).changelist_view(
             request, extra_context={
                 'extra_var': 'Hello!'
@@ -162,7 +164,6 @@ class CustomArticleAdmin(admin.ModelAdmin):
     delete_selected_confirmation_template = 'custom_admin/delete_selected_confirmation.html'
 
     def changelist_view(self, request):
-        "Test that extra_context works"
         return super(CustomArticleAdmin, self).changelist_view(
             request, extra_context={
                 'extra_var': 'Hello!'
@@ -235,6 +236,7 @@ class PersonaAdmin(admin.ModelAdmin):
 
 class SubscriberAdmin(admin.ModelAdmin):
     actions = ['mail_admin']
+    action_form = MediaActionForm
 
     def mail_admin(self, request, selected):
         EmailMessage(
@@ -252,24 +254,32 @@ def external_mail(modeladmin, request, selected):
         'from@example.com',
         ['to@example.com']
     ).send()
+
+
 external_mail.short_description = 'External mail (Another awesome action)'
 
 
 def redirect_to(modeladmin, request, selected):
     from django.http import HttpResponseRedirect
     return HttpResponseRedirect('/some-where-else/')
+
+
 redirect_to.short_description = 'Redirect to (Awesome action)'
 
 
 def download(modeladmin, request, selected):
     buf = StringIO('This is the content of the file')
     return StreamingHttpResponse(FileWrapper(buf))
+
+
 download.short_description = 'Download subscription'
 
 
 def no_perm(modeladmin, request, selected):
     return HttpResponse(content='No permission to perform this action',
                         status=403)
+
+
 no_perm.short_description = 'No permission to run'
 
 
@@ -344,7 +354,7 @@ class LanguageAdmin(admin.ModelAdmin):
 
 class RecommendationAdmin(admin.ModelAdmin):
     show_full_result_count = False
-    search_fields = ('=titletranslation__text', '=recommender__titletranslation__text',)
+    search_fields = ('=titletranslation__text', '=the_recommender__titletranslation__text',)
 
 
 class WidgetInline(admin.StackedInline):
@@ -631,6 +641,8 @@ class AdminOrderedAdminMethodAdmin(admin.ModelAdmin):
 
 def admin_ordered_callable(obj):
     return obj.order
+
+
 admin_ordered_callable.admin_order_field = 'order'
 
 
@@ -1017,3 +1029,4 @@ site2.register(Person, save_as_continue=False)
 
 site7 = admin.AdminSite(name="admin7")
 site7.register(Article, ArticleAdmin2)
+site7.register(Section)
