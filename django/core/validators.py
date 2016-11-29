@@ -88,12 +88,12 @@ class URLValidator(RegexValidator):
     # Max length for domain name labels is 63 characters per RFC 1034 sec. 3.1
     domain_re = r'(?:\.(?!-)[a-z' + ul + r'0-9-]{1,63}(?<!-))*'
     tld_re = (
-        '\.'                                # dot
-        '(?!-)'                             # can't start with a dash
-        '(?:[a-z' + ul + '-]{2,63}'         # domain label
-        '|xn--[a-z0-9]{1,59})'              # or punycode label
-        '(?<!-)'                            # can't end with a dash
-        '\.?'                               # may have a trailing dot
+        r'\.'                                # dot
+        r'(?!-)'                             # can't start with a dash
+        r'(?:[a-z' + ul + '-]{2,63}'         # domain label
+        r'|xn--[a-z0-9]{1,59})'              # or punycode label
+        r'(?<!-)'                            # can't end with a dash
+        r'\.?'                               # may have a trailing dot
     )
     host_re = '(' + hostname_re + domain_re + tld_re + '|localhost)'
 
@@ -155,8 +155,9 @@ class URLValidator(RegexValidator):
         if len(urlsplit(value).netloc) > 253:
             raise ValidationError(self.message, code=self.code)
 
+
 integer_validator = RegexValidator(
-    _lazy_re_compile('^-?\d+\Z'),
+    _lazy_re_compile(r'^-?\d+\Z'),
     message=_('Enter a valid integer.'),
     code='invalid',
 )
@@ -236,6 +237,7 @@ class EmailValidator(object):
             (self.code == other.code)
         )
 
+
 validate_email = EmailValidator()
 
 slug_re = _lazy_re_compile(r'^[-a-zA-Z0-9_]+\Z')
@@ -252,7 +254,7 @@ validate_unicode_slug = RegexValidator(
     'invalid'
 )
 
-ipv4_re = _lazy_re_compile(r'^(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z')
+ipv4_re = _lazy_re_compile(r'^(25[0-5]|2[0-4][0-9]|[0-1]?[0-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9]?[0-9])){3}\Z')
 validate_ipv4_address = RegexValidator(ipv4_re, _('Enter a valid IPv4 address.'), 'invalid')
 
 
@@ -269,6 +271,7 @@ def validate_ipv46_address(value):
             validate_ipv6_address(value)
         except ValidationError:
             raise ValidationError(_('Enter a valid IPv4 or IPv6 address.'), code='invalid')
+
 
 ip_address_validator_map = {
     'both': ([validate_ipv46_address], _('Enter a valid IPv4 or IPv6 address.')),
@@ -295,7 +298,7 @@ def ip_address_validators(protocol, unpack_ipv4):
 
 
 def int_list_validator(sep=',', message=None, code='invalid', allow_negative=False):
-    regexp = _lazy_re_compile('^%(neg)s\d+(?:%(sep)s%(neg)s\d+)*\Z' % {
+    regexp = _lazy_re_compile(r'^%(neg)s\d+(?:%(sep)s%(neg)s\d+)*\Z' % {
         'neg': '(-)?' if allow_negative else '',
         'sep': re.escape(sep),
     })
@@ -499,6 +502,7 @@ def get_available_image_extensions():
     else:
         Image.init()
         return [ext.lower()[1:] for ext in Image.EXTENSION.keys()]
+
 
 validate_image_file_extension = FileExtensionValidator(
     allowed_extensions=get_available_image_extensions(),

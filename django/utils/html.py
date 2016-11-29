@@ -33,14 +33,6 @@ word_split_re = re.compile(r'''([\s<>"']+)''')
 simple_url_re = re.compile(r'^https?://\[?\w', re.IGNORECASE)
 simple_url_2_re = re.compile(r'^www\.|^(?!http)\w[^@]+\.(com|edu|gov|int|mil|net|org)($|/.*)$', re.IGNORECASE)
 simple_email_re = re.compile(r'^\S+@\S+\.\S+$')
-link_target_attribute_re = re.compile(r'(<a [^>]*?)target=[^\s>]+')
-html_gunk_re = re.compile(
-    r'(?:<br clear="all">|<i><\/i>|<b><\/b>|<em><\/em>|<strong><\/strong>|'
-    '<\/?smallcaps>|<\/?uppercase>)', re.IGNORECASE)
-hard_coded_bullets_re = re.compile(
-    r'((?:<p>(?:%s).*?[a-zA-Z].*?</p>\s*)+)' % '|'.join(re.escape(x) for x in DOTS), re.DOTALL
-)
-trailing_empty_content_re = re.compile(r'(?:<p>(?:&nbsp;|\s|<br \/>)*?</p>\s*)+\Z')
 
 
 @keep_lazy(six.text_type, SafeText)
@@ -57,6 +49,7 @@ def escape(text):
         force_text(text).replace('&', '&amp;').replace('<', '&lt;')
         .replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;')
     )
+
 
 _js_escapes = {
     ord('\\'): '\\u005C',

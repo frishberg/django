@@ -35,7 +35,9 @@ class SimpleArrayField(forms.CharField):
         return value
 
     def to_python(self, value):
-        if value:
+        if isinstance(value, list):
+            items = value
+        elif value:
             items = value.split(self.delimiter)
         else:
             items = []
@@ -102,6 +104,12 @@ class SplitArrayWidget(forms.Widget):
     def value_from_datadict(self, data, files, name):
         return [self.widget.value_from_datadict(data, files, '%s_%s' % (name, index))
                 for index in range(self.size)]
+
+    def value_omitted_from_data(self, data, files, name):
+        return all(
+            self.widget.value_omitted_from_data(data, files, '%s_%s' % (name, index))
+            for index in range(self.size)
+        )
 
     def id_for_label(self, id_):
         # See the comment for RadioSelect.id_for_label()

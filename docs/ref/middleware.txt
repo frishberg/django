@@ -68,9 +68,15 @@ Adds a few conveniences for perfectionists:
 
 * Sets the ``Content-Length`` header for non-streaming responses.
 
-.. versionchanged: 1.11
+.. versionchanged:: 1.11
 
     Older versions didn't set the ``Content-Length`` header.
+
+.. deprecated:: 1.11
+
+    The :setting:`USE_ETAGS` setting is deprecated in favor of using
+    :class:`~django.middleware.http.ConditionalGetMiddleware` for ETag
+    processing.
 
 .. attribute:: CommonMiddleware.response_redirect_class
 
@@ -149,6 +155,9 @@ It will NOT compress content if any of the following are true:
 * The request (the browser) hasn't sent an ``Accept-Encoding`` header
   containing ``gzip``.
 
+If the response has an ``ETag`` header, the ETag is made weak to comply with
+:rfc:`7232#section-2.1`.
+
 You can apply GZip compression to individual views using the
 :func:`~django.views.decorators.gzip.gzip_page()` decorator.
 
@@ -166,12 +175,16 @@ Conditional GET middleware
 
 .. class:: ConditionalGetMiddleware
 
-Handles conditional GET operations. If the response has a ``ETag`` or
+Handles conditional GET operations. If the response doesn't have an ``ETag``
+header, the middleware adds one if needed. If the response has a ``ETag`` or
 ``Last-Modified`` header, and the request has ``If-None-Match`` or
 ``If-Modified-Since``, the response is replaced by an
 :class:`~django.http.HttpResponseNotModified`.
 
-Also sets the ``Date`` and ``Content-Length`` response-headers.
+.. versionchanged:: 1.11
+
+    In older versions, the middleware set the ``Content-Length`` and ``Date``
+    headers and didn't set the ``ETag`` header.
 
 Locale middleware
 -----------------
@@ -226,6 +239,7 @@ enabled or disabled with a setting.
 * :setting:`SECURE_BROWSER_XSS_FILTER`
 * :setting:`SECURE_CONTENT_TYPE_NOSNIFF`
 * :setting:`SECURE_HSTS_INCLUDE_SUBDOMAINS`
+* :setting:`SECURE_HSTS_PRELOAD`
 * :setting:`SECURE_HSTS_SECONDS`
 * :setting:`SECURE_REDIRECT_EXEMPT`
 * :setting:`SECURE_SSL_HOST`
@@ -255,10 +269,14 @@ so that infrequent visitors will be protected (31536000 seconds, i.e. 1 year,
 is common).
 
 Additionally, if you set the :setting:`SECURE_HSTS_INCLUDE_SUBDOMAINS` setting
-to ``True``, ``SecurityMiddleware`` will add the ``includeSubDomains`` tag to
-the ``Strict-Transport-Security`` header. This is recommended (assuming all
+to ``True``, ``SecurityMiddleware`` will add the ``includeSubDomains`` directive
+to the ``Strict-Transport-Security`` header. This is recommended (assuming all
 subdomains are served exclusively using HTTPS), otherwise your site may still
 be vulnerable via an insecure connection to a subdomain.
+
+If you wish to submit your site to the `browser preload list`_, set the
+:setting:`SECURE_HSTS_PRELOAD` setting to ``True``. That appends the
+``preload`` directive to the ``Strict-Transport-Security`` header.
 
 .. warning::
     The HSTS policy applies to your entire domain, not just the URL of the
@@ -277,6 +295,7 @@ be vulnerable via an insecure connection to a subdomain.
     you may need to set the :setting:`SECURE_PROXY_SSL_HEADER` setting.
 
 .. _"Strict-Transport-Security" header: https://en.wikipedia.org/wiki/Strict_Transport_Security
+.. _browser preload list: https://hstspreload.appspot.com/
 
 .. _x-content-type-options:
 
@@ -466,7 +485,7 @@ Here are some hints about the ordering of various Django middleware classes:
 
 #. :class:`~django.middleware.http.ConditionalGetMiddleware`
 
-   Before ``CommonMiddleware``: uses its ``Etag`` header when
+   Before ``CommonMiddleware``: uses its ``ETag`` header when
    :setting:`USE_ETAGS` = ``True``.
 
 #. :class:`~django.contrib.sessions.middleware.SessionMiddleware`

@@ -7,7 +7,9 @@ import re
 import shutil
 import time
 import warnings
-from unittest import SkipTest, skipUnless
+from unittest import skipUnless
+
+from admin_scripts.tests import AdminScriptTestCase
 
 from django.core import management
 from django.core.management import execute_from_command_line
@@ -97,7 +99,7 @@ class ExtractorTests(POFileAssertionMixin, RunInTmpDirMixin, SimpleTestCase):
         self.fail("The token '%s' could not be found in %s, please check the test config" % (token, path))
 
     def assertLocationCommentPresent(self, po_filename, line_number, *comment_parts):
-        """
+        r"""
         self.assertLocationCommentPresent('django.po', 42, 'dirA', 'dirB', 'foo.py')
 
         verifies that the django.po file has a gettext-style location comment of the form
@@ -134,6 +136,19 @@ class ExtractorTests(POFileAssertionMixin, RunInTmpDirMixin, SimpleTestCase):
 
 
 class BasicExtractorTests(ExtractorTests):
+
+    @override_settings(USE_I18N=False)
+    def test_use_i18n_false(self):
+        """
+        makemessages also runs successfully when USE_I18N is False.
+        """
+        management.call_command('makemessages', locale=[LOCALE], verbosity=0)
+        self.assertTrue(os.path.exists(self.PO_FILE))
+        with io.open(self.PO_FILE, 'r', encoding='utf-8') as fp:
+            po_contents = fp.read()
+            # Check two random strings
+            self.assertIn('#. Translators: One-line translator comment #1', po_contents)
+            self.assertIn('msgctxt "Special trans context #1"', po_contents)
 
     def test_comments_extractor(self):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
@@ -199,7 +214,7 @@ class BasicExtractorTests(ExtractorTests):
         )
         with self.assertRaisesMessage(SyntaxError, msg):
             management.call_command('makemessages', locale=[LOCALE], extensions=['tpl'], verbosity=0)
-        # Check that the temporary file was cleaned up
+        # The temporary file was cleaned up
         self.assertFalse(os.path.exists('./templates/template_with_error.tpl.py'))
 
     def test_unicode_decode_error(self):
@@ -222,9 +237,8 @@ class BasicExtractorTests(ExtractorTests):
 
     def test_template_message_context_extractor(self):
         """
-        Ensure that message contexts are correctly extracted for the
-        {% trans %} and {% blocktrans %} template tags.
-        Refs #14806.
+        Message contexts are correctly extracted for the {% trans %} and
+        {% blocktrans %} template tags (#14806).
         """
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
@@ -294,7 +308,7 @@ class BasicExtractorTests(ExtractorTests):
                 self, str(ws[2].message),
                 r"The translator-targeted comment 'Translators: ignored i18n "
                 r"comment #4' \(file templates[/\\]comments.thtml, line 8\) "
-                "was ignored, because it wasn't the last item on the line\."
+                r"was ignored, because it wasn't the last item on the line\."
             )
         # Now test .po file contents
         self.assertTrue(os.path.exists(self.PO_FILE))
@@ -335,7 +349,7 @@ class BasicExtractorTests(ExtractorTests):
 
     def test_makemessages_find_files(self):
         """
-        Test that find_files only discover files having the proper extensions.
+        find_files only discover files having the proper extensions.
         """
         cmd = MakeMessagesCommand()
         cmd.ignore_patterns = ['CVS', '.*', '*~', '*.pyc']
@@ -485,7 +499,7 @@ class SymlinkExtractorTests(ExtractorTests):
                 try:
                     os.symlink(os.path.join(self.test_dir, 'templates'), self.symlinked_dir)
                 except (OSError, NotImplementedError):
-                    raise SkipTest("os.symlink() is available on this OS but can't be used by this user.")
+                    self.skipTest("os.symlink() is available on this OS but can't be used by this user.")
             os.chdir(self.test_dir)
             management.call_command('makemessages', locale=[LOCALE], verbosity=0, symlinks=True)
             self.assertTrue(os.path.exists(self.PO_FILE))
@@ -494,7 +508,7 @@ class SymlinkExtractorTests(ExtractorTests):
                 self.assertMsgId('This literal should be included.', po_contents)
             self.assertLocationCommentPresent(self.PO_FILE, None, 'templates_symlinked', 'test.html')
         else:
-            raise SkipTest("os.symlink() not available on this OS + Python version combination.")
+            self.skipTest("os.symlink() not available on this OS + Python version combination.")
 
 
 class CopyPluralFormsExtractorTests(ExtractorTests):
@@ -680,9 +694,8 @@ class CustomLayoutExtractionTests(ExtractorTests):
 
     def test_project_locale_paths(self):
         """
-        Test that:
-          * translations for an app containing a locale folder are stored in that folder
-          * translations outside of that app are in LOCALE_PATHS[0]
+        * translations for an app containing a locale folder are stored in that folder
+        * translations outside of that app are in LOCALE_PATHS[0]
         """
         with override_settings(LOCALE_PATHS=[os.path.join(self.test_dir, 'project_locale')]):
             management.call_command('makemessages', locale=[LOCALE], verbosity=0)
@@ -700,3 +713,11 @@ class CustomLayoutExtractionTests(ExtractorTests):
             with open(app_de_locale, 'r') as fp:
                 po_contents = force_text(fp.read())
                 self.assertMsgId('This app has a locale directory', po_contents)
+
+
+@skipUnless(has_xgettext, 'xgettext is mandatory for extraction tests')
+class NoSettingsExtractionTests(AdminScriptTestCase):
+    def test_makemessages_no_settings(self):
+        out, err = self.run_django_admin(['makemessages', '-l', 'en', '-v', '0'])
+        self.assertNoOutput(err)
+        self.assertNoOutput(out)

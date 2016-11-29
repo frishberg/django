@@ -1,6 +1,8 @@
-=============================================
-Django 1.10 release notes - UNDER DEVELOPMENT
-=============================================
+=========================
+Django 1.10 release notes
+=========================
+
+*August 1, 2016*
 
 Welcome to Django 1.10!
 
@@ -371,9 +373,10 @@ Migrations
 * Added support for :ref:`non-atomic migrations <non-atomic-migrations>` by
   setting the ``atomic`` attribute on a ``Migration``.
 
-* The ``migrate`` and ``makemigrations`` commands now check for a consistent
-  migration history. If they find some unapplied dependencies of an applied
-  migration, ``InconsistentMigrationHistory`` is raised.
+* The ``migrate`` and ``makemigrations`` commands now :ref:`check for a
+  consistent migration history <migration-history-consistency>`. If they find
+  some unapplied dependencies of an applied migration,
+  ``InconsistentMigrationHistory`` is raised.
 
 * The :func:`~django.db.models.signals.pre_migrate` and
   :func:`~django.db.models.signals.post_migrate` signals now dispatch their
@@ -825,6 +828,9 @@ Miscellaneous
 * In light of the previous change, the test client's
   :meth:`~django.test.Client.login()` method no longer always rejects inactive
   users but instead delegates this decision to the authentication backend.
+  :meth:`~django.test.Client.force_login()` also delegates the decision to the
+  authentication backend, so if you're using the default backends, you need to
+  use an active user.
 
 * :func:`django.views.i18n.set_language` may now return a 204 status code for
   AJAX requests.
@@ -852,7 +858,10 @@ Miscellaneous
 * Required form fields now have the ``required`` HTML attribute. Set the
   :attr:`Form.use_required_attribute <django.forms.Form.use_required_attribute>`
   attribute to ``False`` to disable it. You could also add the ``novalidate``
-  attribute to ``<form>`` if you don't want browser validation.
+  attribute to ``<form>`` if you don't want browser validation. To disable
+  the ``required`` attribute on custom widgets, override the
+  :meth:`Widget.use_required_attribute() <django.forms.Widget.use_required_attribute>`
+  method.
 
 * The WSGI handler no longer removes content of responses from ``HEAD``
   requests or responses with a ``status_code`` of 100-199, 204, or 304. Most
@@ -897,6 +906,18 @@ Miscellaneous
 * If you subclass ``AbstractBaseUser`` and override ``clean()``, be sure it
   calls ``super()``. :meth:`.AbstractBaseUser.normalize_username` is called in
   a new :meth:`.AbstractBaseUser.clean` method.
+
+* Private API ``django.forms.models.model_to_dict()`` returns a queryset rather
+  than a list of primary keys for ``ManyToManyField``\s .
+
+* If ``django.contrib.staticfiles`` is
+  installed, the :ttag:`static`  template tag uses the ``staticfiles`` storage
+  to construct the URL rather than simply joining the value with
+  ``STATIC_ROOT``. The new approach encodes the URL, which could be
+  backwards-incompatible in cases such as including a fragment in a path, e.g.
+  ``{% static 'img.svg#fragment' %}``, since the ``#`` is encoded as ``%23``.
+  To adapt, move the fragment outside the template tag:
+  ``{% static 'img.svg' %}#fragment``.
 
 .. _deprecated-features-1.10:
 
@@ -1058,6 +1079,14 @@ method, e.g.::
 
 If you override these methods in a custom user model, you must change them to
 properties or attributes.
+
+Django uses a ``CallableBool`` object to allow these attributes to work as both
+a property and a method. Thus, until the deprecation period ends, you cannot
+compare these properties using the ``is`` operator. That is, the following
+won't work::
+
+    if request.user.is_authenticated is True:
+        ...
 
 Custom manager classes available through ``prefetch_related`` must define a ``_apply_rel_filters()`` method
 -----------------------------------------------------------------------------------------------------------

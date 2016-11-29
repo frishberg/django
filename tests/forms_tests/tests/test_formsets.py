@@ -53,6 +53,7 @@ FavoriteDrinksFormSet = formset_factory(FavoriteDrinkForm, formset=BaseFavoriteD
 class SplitDateTimeForm(Form):
     when = SplitDateTimeField(initial=datetime.datetime.now)
 
+
 SplitDateTimeFormSet = formset_factory(SplitDateTimeForm)
 
 
@@ -128,7 +129,7 @@ class FormsFormsetTestCase(SimpleTestCase):
 
     def test_form_kwargs_formset(self):
         """
-        Test that custom kwargs set on the formset instance are passed to the
+        Custom kwargs set on the formset instance are passed to the
         underlying forms.
         """
         FormSet = formset_factory(CustomKwargForm, extra=2)
@@ -139,7 +140,7 @@ class FormsFormsetTestCase(SimpleTestCase):
 
     def test_form_kwargs_formset_dynamic(self):
         """
-        Test that form kwargs can be passed dynamically in a formset.
+        Form kwargs can be passed dynamically in a formset.
         """
         class DynamicBaseFormSet(BaseFormSet):
             def get_form_kwargs(self, index):
@@ -376,6 +377,17 @@ class FormsFormsetTestCase(SimpleTestCase):
         formset = ChoiceFormSet(data, auto_id=False, prefix='choices')
         self.assertFalse(formset.is_valid())
         self.assertEqual(formset.non_form_errors(), ['Please submit 3 or more forms.'])
+
+    def test_formset_validate_min_excludes_empty_forms(self):
+        data = {
+            'choices-TOTAL_FORMS': '2',
+            'choices-INITIAL_FORMS': '0',
+        }
+        ChoiceFormSet = formset_factory(Choice, extra=2, min_num=1, validate_min=True, can_delete=True)
+        formset = ChoiceFormSet(data, prefix='choices')
+        self.assertFalse(formset.has_changed())
+        self.assertFalse(formset.is_valid())
+        self.assertEqual(formset.non_form_errors(), ['Please submit 1 or more forms.'])
 
     def test_second_form_partially_filled_2(self):
         # And once again, if we try to partially complete a form, validation will fail.
@@ -845,8 +857,7 @@ class FormsFormsetTestCase(SimpleTestCase):
 <td><input type="text" name="form-1-name" id="id_form-1-name" /></td></tr>"""
         )
 
-        # Ensure that max_num has no effect when extra is less than max_num.
-
+        # max_num has no effect when extra is less than max_num.
         LimitedFavoriteDrinkFormSet = formset_factory(FavoriteDrinkForm, extra=1, max_num=2)
         formset = LimitedFavoriteDrinkFormSet()
         form_output = []
@@ -1271,6 +1282,7 @@ class ArticleForm(Form):
     title = CharField()
     pub_date = DateField()
 
+
 ArticleFormSet = formset_factory(ArticleForm)
 
 
@@ -1331,7 +1343,7 @@ class TestIsBoundBehavior(SimpleTestCase):
 
 class TestEmptyFormSet(SimpleTestCase):
     def test_empty_formset_is_valid(self):
-        """Test that an empty formset still calls clean()"""
+        """An empty formset still calls clean()"""
         EmptyFsetWontValidateFormset = formset_factory(FavoriteDrinkForm, extra=0, formset=EmptyFsetWontValidate)
         formset = EmptyFsetWontValidateFormset(
             data={'form-INITIAL_FORMS': '0', 'form-TOTAL_FORMS': '0'},

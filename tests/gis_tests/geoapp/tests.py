@@ -15,7 +15,7 @@ from django.test import TestCase, ignore_warnings, skipUnlessDBFeature
 from django.utils import six
 from django.utils.deprecation import RemovedInDjango20Warning
 
-from ..utils import no_oracle, oracle, postgis, skipUnlessGISLookup, spatialite
+from ..utils import oracle, postgis, skipUnlessGISLookup, spatialite
 from .models import (
     City, Country, Feature, MinusOneSRID, NonConcreteModel, PennsylvaniaCity,
     State, Track,
@@ -63,9 +63,9 @@ class GeoModelTest(TestCase):
         nullcity.point.x = 23
         nullcity.point.y = 5
         # Checking assignments pre & post-save.
-        self.assertNotEqual(Point(23, 5), City.objects.get(name='NullCity').point)
+        self.assertNotEqual(Point(23, 5, srid=4326), City.objects.get(name='NullCity').point)
         nullcity.save()
-        self.assertEqual(Point(23, 5), City.objects.get(name='NullCity').point)
+        self.assertEqual(Point(23, 5, srid=4326), City.objects.get(name='NullCity').point)
         nullcity.delete()
 
         # Testing on a Polygon
@@ -479,8 +479,11 @@ class GeoQuerySetTest(TestCase):
                 # SpatiaLite).
                 pass
             else:
-                self.assertEqual(c.mpoly.difference(geom), c.difference)
-                if not spatialite:
+                if spatialite:
+                    # Spatialite `difference` doesn't have an SRID
+                    self.assertEqual(c.mpoly.difference(geom).wkt, c.difference.wkt)
+                else:
+                    self.assertEqual(c.mpoly.difference(geom), c.difference)
                     self.assertEqual(c.mpoly.intersection(geom), c.intersection)
                 # Ordering might differ in collections
                 self.assertSetEqual(set(g.wkt for g in c.mpoly.sym_difference(geom)),
@@ -848,11 +851,7 @@ class GeoQuerySetTest(TestCase):
                         self.assertAlmostEqual(c1[0] + xfac, c2[0], 5)
                         self.assertAlmostEqual(c1[1] + yfac, c2[1], 5)
 
-    # TODO: Oracle can be made to pass if
-    # union1 = union2 = fromstr('POINT (-97.5211570000000023 34.4646419999999978)')
-    # but this seems unexpected and should be investigated to determine the cause.
     @skipUnlessDBFeature("has_unionagg_method")
-    @no_oracle
     def test_unionagg(self):
         """
         Testing the `Union` aggregate.
@@ -877,7 +876,7 @@ class GeoQuerySetTest(TestCase):
 
     def test_within_subquery(self):
         """
-        Test that using a queryset inside a geo lookup is working (using a subquery)
+        Using a queryset inside a geo lookup is working (using a subquery)
         (#14483).
         """
         tex_cities = City.objects.filter(

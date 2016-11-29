@@ -139,8 +139,12 @@ Models
 * **models.E021**: ``ordering`` and ``order_with_respect_to`` cannot be used
   together.
 * **models.E022**: ``<function>`` contains a lazy reference to
-  ``<app label>>.<model>``, but app ``<app label>`` isn't installed or
+  ``<app label>.<model>``, but app ``<app label>`` isn't installed or
   doesn't provide model ``<model>``.
+* **models.E023**: The model name ``<model>`` cannot start or end with an
+  underscore as it collides with the query lookup syntax.
+* **models.E024**: The model name ``<model>`` cannot contain double underscores
+  as it collides with the query lookup syntax.
 
 Fields
 ~~~~~~
@@ -183,7 +187,10 @@ File Fields
 ~~~~~~~~~~~
 
 * **fields.E200**: ``unique`` is not a valid argument for a ``FileField``.
+  *This check is removed in Django 1.11*.
 * **fields.E201**: ``primary_key`` is not a valid argument for a ``FileField``.
+* **fields.E202**: ``FileField``’s ``upload_to`` argument must be a relative
+  path, not an absolute path.
 * **fields.E210**: Cannot use ``ImageField`` because Pillow is not installed.
 
 Related Fields
@@ -312,7 +319,7 @@ with the admin site:
   ``fields``.
 * **admin.E012**: There are duplicate field(s) in ``fieldsets[n][1]``.
 * **admin.E013**: ``fields[n]/fieldsets[n][m]`` cannot include the
-  many-to-many field ``<field name>``, because that field manually specifies a
+  ``ManyToManyField`` ``<field name>``, because that field manually specifies a
   relationship model.
 * **admin.E014**: The value of ``exclude`` must be a list or tuple.
 * **admin.E015**: The value of ``exclude`` contains duplicate field(s).
@@ -336,8 +343,8 @@ with the admin site:
 * **admin.E027**: The value of ``prepopulated_fields`` refers to
   ``<field name>``, which is not an attribute of ``<model>``.
 * **admin.E028**: The value of ``prepopulated_fields`` refers to
-  ``<field name>``, which must not be a ``DateTimeField``, a foreign key or a
-  many-to-many field.
+  ``<field name>``, which must not be a ``DateTimeField``, a ``ForeignKey``, or a
+  ``ManyToManyField`` field.
 * **admin.E029**: The value of ``prepopulated_fields[<field name>]`` must be a
   list or tuple.
 * **admin.E030**: The value of ``prepopulated_fields`` refers to
@@ -362,7 +369,7 @@ with the admin site:
 * **admin.E102**: The value of ``save_on_top`` must be a boolean.
 * **admin.E103**: The value of ``inlines`` must be a list or tuple.
 * **admin.E104**: ``<InlineModelAdmin class>`` must inherit from
-  ``BaseModelAdmin``.
+  ``InlineModelAdmin``.
 * **admin.E105**: ``<InlineModelAdmin class>`` must have a ``model`` attribute.
 * **admin.E106**: The value of ``<InlineModelAdmin class>.model`` must be a
   ``Model``.
@@ -371,7 +378,7 @@ with the admin site:
   which is not a callable, an attribute of ``<ModelAdmin class>``, or an
   attribute or method on ``<model>``.
 * **admin.E109**: The value of ``list_display[n]`` must not be a
-  many-to-many field.
+  ``ManyToManyField`` field.
 * **admin.E110**: The value of ``list_display_links`` must be a list, a tuple,
   or ``None``.
 * **admin.E111**: The value of ``list_display_links[n]`` refers to ``<label>``,
@@ -596,6 +603,9 @@ The following checks are run if you use the :option:`check --deploy` option:
   for your site to serve other parts of itself in a frame, you should change
   it to ``'DENY'``.
 * **security.W020**: :setting:`ALLOWED_HOSTS` must not be empty in deployment.
+* **security.W021**: You have not set the
+  :setting:`SECURE_HSTS_PRELOAD` setting to ``True``. Without this, your site
+  cannot be submitted to the browser preload list.
 
 Sites
 -----
@@ -654,6 +664,8 @@ The following checks are performed on your URL configuration:
   including URLs.
 * **urls.W002**: Your URL pattern ``<pattern>`` has a ``regex``
   beginning with a ``/``. Remove this slash as it is unnecessary.
+  If this pattern is targeted in an :func:`~django.conf.urls.include`, ensure
+  the :func:`~django.conf.urls.include` pattern has a trailing ``/``.
 * **urls.W003**: Your URL pattern ``<pattern>`` has a ``name``
   including a ``:``. Remove the colon, to avoid ambiguous namespace
   references.

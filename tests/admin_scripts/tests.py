@@ -34,6 +34,7 @@ from django.utils.six import PY2, PY3, StringIO
 
 custom_templates_dir = os.path.join(os.path.dirname(upath(__file__)), 'custom_templates')
 
+PY36 = sys.version_info >= (3, 6)
 SYSTEM_CHECK_MSG = 'System check identified no issues'
 
 
@@ -613,7 +614,7 @@ class DjangoAdminSettingsDirectory(AdminScriptTestCase):
         self.addCleanup(shutil.rmtree, app_path)
         self.assertNoOutput(err)
         self.assertTrue(os.path.exists(app_path))
-        unicode_literals_import = "from __future__ import unicode_literals\n"
+        unicode_literals_import = "# -*- coding: utf-8 -*-\nfrom __future__ import unicode_literals\n\n"
         with open(os.path.join(app_path, 'apps.py'), 'r') as f:
             content = f.read()
             self.assertIn("class SettingsTestConfig(AppConfig)", content)
@@ -622,6 +623,15 @@ class DjangoAdminSettingsDirectory(AdminScriptTestCase):
                 self.assertIn(unicode_literals_import, content)
         if not PY3:
             with open(os.path.join(app_path, 'models.py'), 'r') as fp:
+                content = fp.read()
+            self.assertIn(unicode_literals_import, content)
+            with open(os.path.join(app_path, 'views.py'), 'r') as fp:
+                content = fp.read()
+            self.assertIn(unicode_literals_import, content)
+            with open(os.path.join(app_path, 'admin.py'), 'r') as fp:
+                content = fp.read()
+            self.assertIn(unicode_literals_import, content)
+            with open(os.path.join(app_path, 'tests.py'), 'r') as fp:
                 content = fp.read()
             self.assertIn(unicode_literals_import, content)
 
@@ -707,7 +717,7 @@ class ManageNoSettings(AdminScriptTestCase):
         args = ['check', 'admin_scripts']
         out, err = self.run_manage(args)
         self.assertNoOutput(out)
-        self.assertOutput(err, "No module named '?(test_project\.)?settings'?", regex=True)
+        self.assertOutput(err, r"No module named '?(test_project\.)?settings'?", regex=True)
 
     def test_builtin_with_bad_settings(self):
         "no settings: manage.py builtin commands fail if settings file (from argument) doesn't exist"
@@ -940,7 +950,7 @@ class ManageAlternateSettings(AdminScriptTestCase):
         args = ['check', 'admin_scripts']
         out, err = self.run_manage(args)
         self.assertNoOutput(out)
-        self.assertOutput(err, "No module named '?(test_project\.)?settings'?", regex=True)
+        self.assertOutput(err, r"No module named '?(test_project\.)?settings'?", regex=True)
 
     def test_builtin_with_settings(self):
         "alternate: manage.py builtin commands work with settings provided as argument"
@@ -975,7 +985,7 @@ class ManageAlternateSettings(AdminScriptTestCase):
         args = ['noargs_command']
         out, err = self.run_manage(args)
         self.assertNoOutput(out)
-        self.assertOutput(err, "No module named '?(test_project\.)?settings'?", regex=True)
+        self.assertOutput(err, r"No module named '?(test_project\.)?settings'?", regex=True)
 
     def test_custom_command_with_settings(self):
         "alternate: manage.py can execute user commands if settings are provided as argument"
@@ -1157,7 +1167,7 @@ class ManageCheck(AdminScriptTestCase):
         args = ['check']
         out, err = self.run_manage(args)
         self.assertNoOutput(out)
-        self.assertOutput(err, 'ImportError')
+        self.assertOutput(err, 'ModuleNotFoundError' if PY36 else 'ImportError')
         self.assertOutput(err, 'No module named')
         self.assertOutput(err, 'admin_scriptz')
 
@@ -1418,8 +1428,8 @@ class ManageTestserver(AdminScriptTestCase):
 
 ##########################################################################
 # COMMAND PROCESSING TESTS
-# Check that user-space commands are correctly handled - in particular,
-# that arguments to the commands are correctly parsed and processed.
+# user-space commands are correctly handled - in particular, arguments to
+# the commands are correctly parsed and processed.
 ##########################################################################
 
 class CommandTypes(AdminScriptTestCase):
@@ -1661,7 +1671,7 @@ class CommandTypes(AdminScriptTestCase):
 
     def test_run_from_argv_non_ascii_error(self):
         """
-        Test that non-ASCII message of CommandError does not raise any
+        Non-ASCII message of CommandError does not raise any
         UnicodeDecodeError in run_from_argv.
         """
         def raise_command_error(*args, **kwargs):
@@ -2117,6 +2127,20 @@ class DiffSettings(AdminScriptTestCase):
         out, err = self.run_manage(args)
         self.assertNoOutput(err)
         self.assertOutput(out, "### STATIC_URL = None")
+
+    def test_custom_default(self):
+        """
+        The --default option specifies an alternate settings module for
+        comparison.
+        """
+        self.write_settings('settings_default.py', sdict={'FOO': '"foo"', 'BAR': '"bar1"'})
+        self.addCleanup(self.remove_settings, 'settings_default.py')
+        self.write_settings('settings_to_diff.py', sdict={'FOO': '"foo"', 'BAR': '"bar2"'})
+        self.addCleanup(self.remove_settings, 'settings_to_diff.py')
+        out, err = self.run_manage(['diffsettings', '--settings=settings_to_diff', '--default=settings_default'])
+        self.assertNoOutput(err)
+        self.assertNotInOutput(out, "FOO")
+        self.assertOutput(out, "BAR = 'bar2'")
 
 
 class Dumpdata(AdminScriptTestCase):

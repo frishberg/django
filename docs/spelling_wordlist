@@ -206,7 +206,7 @@ discoverable
 Disqus
 distro
 divisibleby
-django
+Django
 djangojs
 djangonaut
 djangoproject
@@ -239,7 +239,6 @@ environ
 escapejs
 esque
 Ess
-Etag
 ETag
 ETags
 exe
@@ -254,6 +253,7 @@ fallback
 fallbacks
 faq
 FastCGI
+favicon
 fieldset
 fieldsets
 filename
@@ -333,12 +333,12 @@ hoc
 Hoerner
 Holovaty
 Holscher
+Holtermann
 Homebrew
 honeypot
 Honza
 hostname
 hostnames
-howto
 hstore
 html
 http
@@ -594,6 +594,7 @@ prefetches
 prefetching
 prefork
 preforked
+preload
 prepend
 prepended
 prepending
@@ -948,13 +949,7 @@ virtualenv
 virtualenvs
 virtualized
 Votizen
-webapps
-webkit
-WebKit
 Weblog
-webpages
-webserver
-webservers
 whatsnext
 whitelist
 whitelisted

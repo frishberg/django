@@ -794,7 +794,7 @@ class RelativeFieldTests(SimpleTestCase):
             pass
 
         for related_name in related_names:
-            Child = type(str('Child_%s') % str(related_name), (models.Model,), {
+            Child = type(str('Child%s') % str(related_name), (models.Model,), {
                 'parent': models.ForeignKey('Parent', models.CASCADE, related_name=related_name),
                 '__module__': Parent.__module__,
             })
@@ -994,6 +994,21 @@ class AccessorClashTests(SimpleTestCase):
             )
         ]
         self.assertEqual(errors, expected)
+
+    def test_no_clash_for_hidden_related_name(self):
+        class Stub(models.Model):
+            pass
+
+        class ManyToManyRel(models.Model):
+            thing1 = models.ManyToManyField(Stub, related_name='+')
+            thing2 = models.ManyToManyField(Stub, related_name='+')
+
+        class FKRel(models.Model):
+            thing1 = models.ForeignKey(Stub, models.CASCADE, related_name='+')
+            thing2 = models.ForeignKey(Stub, models.CASCADE, related_name='+')
+
+        self.assertEqual(ManyToManyRel.check(), [])
+        self.assertEqual(FKRel.check(), [])
 
 
 @isolate_apps('invalid_models_tests')
@@ -1512,7 +1527,7 @@ class ComplexClashTests(SimpleTestCase):
 class M2mThroughFieldsTests(SimpleTestCase):
     def test_m2m_field_argument_validation(self):
         """
-        Tests that ManyToManyField accepts the ``through_fields`` kwarg
+        ManyToManyField accepts the ``through_fields`` kwarg
         only if an intermediary table is specified.
         """
         class Fan(models.Model):
@@ -1523,7 +1538,7 @@ class M2mThroughFieldsTests(SimpleTestCase):
 
     def test_invalid_order(self):
         """
-        Tests that mixing up the order of link fields to ManyToManyField.through_fields
+        Mixing up the order of link fields to ManyToManyField.through_fields
         triggers validation errors.
         """
         class Fan(models.Model):
@@ -1557,7 +1572,7 @@ class M2mThroughFieldsTests(SimpleTestCase):
 
     def test_invalid_field(self):
         """
-        Tests that providing invalid field names to ManyToManyField.through_fields
+        Providing invalid field names to ManyToManyField.through_fields
         triggers validation errors.
         """
         class Fan(models.Model):
@@ -1595,7 +1610,7 @@ class M2mThroughFieldsTests(SimpleTestCase):
 
     def test_explicit_field_names(self):
         """
-        Tests that if ``through_fields`` kwarg is given, it must specify both
+        If ``through_fields`` kwarg is given, it must specify both
         link fields of the intermediary table.
         """
         class Fan(models.Model):

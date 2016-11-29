@@ -54,8 +54,8 @@ END;
 DECLARE
     i INTEGER;
 BEGIN
-    SELECT COUNT(*) INTO i FROM USER_CATALOG
-        WHERE TABLE_NAME = '%(sq_name)s' AND TABLE_TYPE = 'SEQUENCE';
+    SELECT COUNT(1) INTO i FROM USER_SEQUENCES
+        WHERE SEQUENCE_NAME = '%(sq_name)s';
     IF i = 0 THEN
         EXECUTE IMMEDIATE 'CREATE SEQUENCE "%(sq_name)s"';
     END IF;
@@ -84,22 +84,18 @@ WHEN (new.%(col_name)s IS NULL)
         if lookup_type == 'week_day':
             # TO_CHAR(field, 'D') returns an integer from 1-7, where 1=Sunday.
             return "TO_CHAR(%s, 'D')" % field_name
+        elif lookup_type == 'week':
+            # IW = ISO week number
+            return "TO_CHAR(%s, 'IW')" % field_name
         else:
             # http://docs.oracle.com/cd/B19306_01/server.102/b14200/functions050.htm
             return "EXTRACT(%s FROM %s)" % (lookup_type.upper(), field_name)
 
     def date_interval_sql(self, timedelta):
         """
-        Implements the interval functionality for expressions
-        format for Oracle:
-        INTERVAL '3 00:03:20.000000' DAY(1) TO SECOND(6)
+        NUMTODSINTERVAL converts number to INTERVAL DAY TO SECOND literal.
         """
-        minutes, seconds = divmod(timedelta.seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-        days = str(timedelta.days)
-        day_precision = len(days)
-        fmt = "INTERVAL '%s %02d:%02d:%02d.%06d' DAY(%d) TO SECOND(6)"
-        return fmt % (days, hours, minutes, seconds, timedelta.microseconds, day_precision), []
+        return "NUMTODSINTERVAL(%06f, 'SECOND')" % (timedelta.total_seconds()), []
 
     def date_trunc_sql(self, lookup_type, field_name):
         # http://docs.oracle.com/cd/B19306_01/server.102/b14200/functions230.htm#i1002084
@@ -240,9 +236,6 @@ WHEN (new.%(col_name)s IS NULL)
 
     def deferrable_sql(self):
         return " DEFERRABLE INITIALLY DEFERRED"
-
-    def drop_sequence_sql(self, table):
-        return "DROP SEQUENCE %s;" % self.quote_name(self._get_sequence_name(table))
 
     def fetch_returned_insert_id(self, cursor):
         return int(cursor._insert_id_var.getvalue())
@@ -411,6 +404,10 @@ WHEN (new.%(col_name)s IS NULL)
         if value is None:
             return None
 
+        # Expression values are adapted by the database.
+        if hasattr(value, 'resolve_expression'):
+            return value
+
         # cx_Oracle doesn't support tz-aware datetimes
         if timezone.is_aware(value):
             if settings.USE_TZ:
@@ -423,6 +420,10 @@ WHEN (new.%(col_name)s IS NULL)
     def adapt_timefield_value(self, value):
         if value is None:
             return None
+
+        # Expression values are adapted by the database.
+        if hasattr(value, 'resolve_expression'):
+            return value
 
         if isinstance(value, six.string_types):
             return datetime.datetime.strptime(value, '%H:%M:%S')

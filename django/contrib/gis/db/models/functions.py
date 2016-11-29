@@ -1,7 +1,8 @@
 from decimal import Decimal
 
-from django.contrib.gis.db.models.fields import GeometryField
+from django.contrib.gis.db.models.fields import GeometryField, RasterField
 from django.contrib.gis.db.models.sql import AreaField
+from django.contrib.gis.geometry.backend import Geometry
 from django.contrib.gis.measure import (
     Area as AreaMeasure, Distance as DistanceMeasure,
 )
@@ -40,6 +41,8 @@ class GeoFunc(Func):
     def as_sql(self, compiler, connection):
         if self.function is None:
             self.function = connection.ops.spatial_function_name(self.name)
+        if any(isinstance(field, RasterField) for field in self.get_source_fields()):
+            raise TypeError("Geometry functions not supported for raster fields.")
         return super(GeoFunc, self).as_sql(compiler, connection)
 
     def resolve_expression(self, *args, **kwargs):
@@ -74,6 +77,9 @@ class GeomValue(Value):
     def as_sql(self, compiler, connection):
         return '%s(%%s, %s)' % (connection.ops.from_text, self.srid), [connection.ops.Adapter(self.value)]
 
+    def as_mysql(self, compiler, connection):
+        return '%s(%%s)' % (connection.ops.from_text), [connection.ops.Adapter(self.value)]
+
     def as_postgresql(self, compiler, connection):
         if self.geography:
             self.value = connection.ops.Adapter(self.value, geography=self.geography)
@@ -84,6 +90,8 @@ class GeomValue(Value):
 
 class GeoFuncWithGeoParam(GeoFunc):
     def __init__(self, expression, geom, *expressions, **extra):
+        if not isinstance(geom, Geometry):
+            raise TypeError("Please provide a geometry object.")
         if not hasattr(geom, 'srid') or not geom.srid:
             raise ValueError("Please provide a geometry attribute with a defined SRID.")
         super(GeoFuncWithGeoParam, self).__init__(expression, GeomValue(geom), *expressions, **extra)
@@ -241,11 +249,12 @@ class Distance(DistanceResultMixin, OracleToleranceMixin, GeoFuncWithGeoParam):
         elif geo_field.geodetic(connection):
             # Geometry fields with geodetic (lon/lat) coordinates need special distance functions
             if self.spheroid:
-                self.function = 'ST_Distance_Spheroid'  # More accurate, resource intensive
+                # DistanceSpheroid is more accurate and resource intensive than DistanceSphere
+                self.function = connection.ops.spatial_function_name('DistanceSpheroid')
                 # Replace boolean param by the real spheroid of the base field
                 self.source_expressions[2] = Value(geo_field._spheroid)
             else:
-                self.function = 'ST_Distance_Sphere'
+                self.function = connection.ops.spatial_function_name('DistanceSphere')
         return super(Distance, self).as_sql(compiler, connection)
 
     def as_oracle(self, compiler, connection):
@@ -299,7 +308,7 @@ class Length(DistanceResultMixin, OracleToleranceMixin, GeoFunc):
             self.source_expressions.append(Value(self.spheroid))
         elif geo_field.geodetic(connection):
             # Geometry fields with geodetic (lon/lat) coordinates need length_spheroid
-            self.function = 'ST_Length_Spheroid'
+            self.function = connection.ops.spatial_function_name('LengthSpheroid')
             self.source_expressions.append(Value(geo_field._spheroid))
         else:
             dim = min(f.dim for f in self.get_source_fields() if f)
@@ -337,7 +346,7 @@ class NumPoints(GeoFunc):
 
     def as_sqlite(self, compiler, connection):
         if self.source_expressions[self.geom_param_pos].output_field.geom_type != 'LINESTRING':
-            raise TypeError("Spatialite NumPoints can only operate on LineString content")
+            raise TypeError("SpatiaLite NumPoints can only operate on LineString content")
         return super(NumPoints, self).as_sql(compiler, connection)
 
 

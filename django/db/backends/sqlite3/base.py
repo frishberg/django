@@ -11,11 +11,12 @@ import decimal
 import re
 import warnings
 
+import pytz
+
 from django.conf import settings
 from django.db import utils
 from django.db.backends import utils as backend_utils
 from django.db.backends.base.base import BaseDatabaseWrapper
-from django.db.backends.base.validation import BaseDatabaseValidation
 from django.utils import six, timezone
 from django.utils.dateparse import (
     parse_date, parse_datetime, parse_duration, parse_time,
@@ -23,11 +24,6 @@ from django.utils.dateparse import (
 from django.utils.deprecation import RemovedInDjango20Warning
 from django.utils.encoding import force_text
 from django.utils.safestring import SafeBytes
-
-try:
-    import pytz
-except ImportError:
-    pytz = None
 
 try:
     try:
@@ -45,9 +41,6 @@ from .features import DatabaseFeatures                      # isort:skip
 from .introspection import DatabaseIntrospection            # isort:skip
 from .operations import DatabaseOperations                  # isort:skip
 from .schema import DatabaseSchemaEditor                    # isort:skip
-
-DatabaseError = Database.DatabaseError
-IntegrityError = Database.IntegrityError
 
 
 def adapt_datetime_warn_on_aware_datetime(value):
@@ -70,6 +63,7 @@ def decoder(conv_func):
         passing it to the receiver function.
     """
     return lambda s: conv_func(s.decode('utf-8'))
+
 
 Database.register_converter(str("bool"), decoder(lambda s: s == '1'))
 Database.register_converter(str("time"), decoder(parse_time))
@@ -163,16 +157,12 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     Database = Database
     SchemaEditorClass = DatabaseSchemaEditor
-
-    def __init__(self, *args, **kwargs):
-        super(DatabaseWrapper, self).__init__(*args, **kwargs)
-
-        self.features = DatabaseFeatures(self)
-        self.ops = DatabaseOperations(self)
-        self.client = DatabaseClient(self)
-        self.creation = DatabaseCreation(self)
-        self.introspection = DatabaseIntrospection(self)
-        self.validation = BaseDatabaseValidation(self)
+    # Classes instantiated in __init__().
+    client_class = DatabaseClient
+    creation_class = DatabaseCreation
+    features_class = DatabaseFeatures
+    introspection_class = DatabaseIntrospection
+    ops_class = DatabaseOperations
 
     def get_connection_params(self):
         settings_dict = self.settings_dict
@@ -233,7 +223,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         # If database is in memory, closing the connection destroys the
         # database. To prevent accidental data loss, ignore close requests on
         # an in-memory db.
-        if not self.is_in_memory_db(self.settings_dict['NAME']):
+        if not self.is_in_memory_db():
             BaseDatabaseWrapper.close(self)
 
     def _savepoint_allowed(self):
@@ -319,8 +309,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         """
         self.cursor().execute("BEGIN")
 
-    def is_in_memory_db(self, name):
-        return name == ":memory:" or "mode=memory" in force_text(name)
+    def is_in_memory_db(self):
+        return self.creation.is_in_memory_db(self.settings_dict['NAME'])
 
 
 FORMAT_QMARK_REGEX = re.compile(r'(?<!%)%s')
@@ -355,6 +345,8 @@ def _sqlite_date_extract(lookup_type, dt):
         return None
     if lookup_type == 'week_day':
         return (dt.isoweekday() % 7) + 1
+    elif lookup_type == 'week':
+        return dt.isocalendar()[1]
     else:
         return getattr(dt, lookup_type)
 
@@ -417,6 +409,8 @@ def _sqlite_datetime_extract(lookup_type, dt, tzname):
         return None
     if lookup_type == 'week_day':
         return (dt.isoweekday() % 7) + 1
+    elif lookup_type == 'week':
+        return dt.isocalendar()[1]
     else:
         return getattr(dt, lookup_type)
 

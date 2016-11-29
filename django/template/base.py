@@ -639,7 +639,7 @@ filter_raw_string = r"""
  )""" % {
     'constant': constant_string,
     'num': r'[-+\.]?\d[\d\.e]*',
-    'var_chars': "\w\.",
+    'var_chars': r'\w\.',
     'filter_sep': re.escape(FILTER_SEPARATOR),
     'arg_sep': re.escape(FILTER_ARGUMENT_SEPARATOR),
 }
@@ -892,9 +892,8 @@ class Variable(object):
                             raise AttributeError
                         current = getattr(current, bit)
                     except (TypeError, AttributeError) as e:
-                        # Reraise an AttributeError raised by a @property
-                        if (isinstance(e, AttributeError) and
-                                not isinstance(current, BaseContext) and bit in dir(current)):
+                        # Reraise if the exception was raised by a @property
+                        if not isinstance(current, BaseContext) and bit in dir(current):
                             raise
                         try:  # list-index lookup
                             current = current[int(bit)]
@@ -1048,6 +1047,7 @@ class VariableNode(Node):
             # quietly.
             return ''
         return render_value_in_context(output, context)
+
 
 # Regex for token keyword arguments
 kwarg_re = re.compile(r"(?:(\w+)=)?(.+)")

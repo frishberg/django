@@ -31,6 +31,8 @@ from django.views.decorators.debug import sensitive_post_parameters
 from django.views.generic.base import TemplateView
 from django.views.generic.edit import FormView
 
+UserModel = get_user_model()
+
 
 def deprecate_current_app(func):
     """
@@ -53,7 +55,16 @@ def deprecate_current_app(func):
     return inner
 
 
-class LoginView(FormView):
+class SuccessURLAllowedHostsMixin(object):
+    success_url_allowed_hosts = set()
+
+    def get_success_url_allowed_hosts(self):
+        allowed_hosts = {self.request.get_host()}
+        allowed_hosts.update(self.success_url_allowed_hosts)
+        return allowed_hosts
+
+
+class LoginView(SuccessURLAllowedHostsMixin, FormView):
     """
     Displays the login form and handles the login action.
     """
@@ -84,7 +95,12 @@ class LoginView(FormView):
             self.redirect_field_name,
             self.request.GET.get(self.redirect_field_name, '')
         )
-        if not is_safe_url(url=redirect_to, host=self.request.get_host()):
+        url_is_safe = is_safe_url(
+            url=redirect_to,
+            allowed_hosts=self.get_success_url_allowed_hosts(),
+            require_https=self.request.is_secure(),
+        )
+        if not url_is_safe:
             return resolve_url(settings.LOGIN_REDIRECT_URL)
         return redirect_to
 
@@ -118,7 +134,7 @@ def login(request, *args, **kwargs):
     return LoginView.as_view(**kwargs)(request, *args, **kwargs)
 
 
-class LogoutView(TemplateView):
+class LogoutView(SuccessURLAllowedHostsMixin, TemplateView):
     """
     Logs out the user and displays 'You are logged out' message.
     """
@@ -150,8 +166,14 @@ class LogoutView(TemplateView):
                 self.redirect_field_name,
                 self.request.GET.get(self.redirect_field_name)
             )
-            # Security check -- don't allow redirection to a different host.
-            if not is_safe_url(url=next_page, host=self.request.get_host()):
+            url_is_safe = is_safe_url(
+                url=next_page,
+                allowed_hosts=self.get_success_url_allowed_hosts(),
+                require_https=self.request.is_secure(),
+            )
+            # Security check -- Ensure the user-originating redirection URL is
+            # safe.
+            if not url_is_safe:
                 next_page = self.request.path
         return next_page
 
@@ -177,11 +199,20 @@ def logout(request, *args, **kwargs):
     return LogoutView.as_view(**kwargs)(request, *args, **kwargs)
 
 
+_sentinel = object()
+
+
 @deprecate_current_app
-def logout_then_login(request, login_url=None, extra_context=None):
+def logout_then_login(request, login_url=None, extra_context=_sentinel):
     """
     Logs out the user if they are logged in. Then redirects to the log-in page.
     """
+    if extra_context is not _sentinel:
+        warnings.warn(
+            "The unused `extra_context` parameter to `logout_then_login` "
+            "is deprecated.", RemovedInDjango21Warning
+        )
+
     if not login_url:
         login_url = settings.LOGIN_URL
     login_url = resolve_url(login_url)
@@ -291,7 +322,6 @@ def password_reset_confirm(request, uidb64=None, token=None,
     warnings.warn("The password_reset_confirm() view is superseded by the "
                   "class-based PasswordResetConfirmView().",
                   RemovedInDjango21Warning, stacklevel=2)
-    UserModel = get_user_model()
     assert uidb64 is not None and token is not None  # checked by URLconf
     if post_reset_redirect is None:
         post_reset_redirect = reverse('password_reset_complete')
@@ -402,6 +432,7 @@ class PasswordResetDoneView(PasswordContextMixin, TemplateView):
 
 class PasswordResetConfirmView(PasswordContextMixin, FormView):
     form_class = SetPasswordForm
+    post_reset_login = False
     success_url = reverse_lazy('password_reset_complete')
     template_name = 'registration/password_reset_confirm.html'
     title = _('Enter new password')
@@ -411,10 +442,18 @@ class PasswordResetConfirmView(PasswordContextMixin, FormView):
     @method_decorator(never_cache)
     def dispatch(self, *args, **kwargs):
         assert 'uidb64' in kwargs and 'token' in kwargs
+
+        self.validlink = False
+        self.user = self.get_user(kwargs['uidb64'])
+
+        if self.user is not None and self.token_generator.check_token(self.user, kwargs['token']):
+            self.validlink = True
+        else:
+            return self.render_to_response(self.get_context_data())
+
         return super(PasswordResetConfirmView, self).dispatch(*args, **kwargs)
 
     def get_user(self, uidb64):
-        UserModel = get_user_model()
         try:
             # urlsafe_base64_decode() decodes to bytestring on Python 3
             uid = force_text(urlsafe_base64_decode(uidb64))
@@ -425,17 +464,18 @@ class PasswordResetConfirmView(PasswordContextMixin, FormView):
 
     def get_form_kwargs(self):
         kwargs = super(PasswordResetConfirmView, self).get_form_kwargs()
-        kwargs['user'] = self.get_user(self.kwargs['uidb64'])
+        kwargs['user'] = self.user
         return kwargs
 
     def form_valid(self, form):
-        form.save()
+        user = form.save()
+        if self.post_reset_login:
+            auth_login(self.request, user)
         return super(PasswordResetConfirmView, self).form_valid(form)
 
     def get_context_data(self, **kwargs):
         context = super(PasswordResetConfirmView, self).get_context_data(**kwargs)
-        user = context['form'].user
-        if user is not None and self.token_generator.check_token(user, self.kwargs['token']):
+        if self.validlink:
             context['validlink'] = True
         else:
             context.update({
