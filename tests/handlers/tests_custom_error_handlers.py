@@ -34,7 +34,7 @@ handler403 = template_response_error_handler
 @override_settings(ROOT_URLCONF='handlers.tests_custom_error_handlers')
 @modify_settings(MIDDLEWARE={'append': 'handlers.tests_custom_error_handlers.MiddlewareAccessingContent'})
 class CustomErrorHandlerTests(SimpleTestCase):
-
+    pass
     def test_handler_renders_template_response(self):
         """
         BaseHandler should render TemplateResponse if necessary.

@@ -60,6 +60,7 @@ class HttpRequest(object):
 
         self.path = ''
         self.path_info = ''
+        self.raw_path_info = ''
         self.method = None
         self.resolver_match = None
         self._post_parse_error = False
@@ -123,9 +124,13 @@ class HttpRequest(object):
     def get_full_path(self, force_append_slash=False):
         # RFC 3986 requires query string arguments to be in the ASCII range.
         # Rather than crash if this doesn't happen, we encode defensively.
+        try:
+            path = self.raw_path
+        except AttributeError:
+            path = self.path
         return '%s%s%s' % (
-            escape_uri_path(self.path),
-            '/' if force_append_slash and not self.path.endswith('/') else '',
+            escape_uri_path(path),
+            '/' if force_append_slash and not path.endswith('/') else '',
             ('?' + iri_to_uri(self.META.get('QUERY_STRING', ''))) if self.META.get('QUERY_STRING', '') else ''
         )
 

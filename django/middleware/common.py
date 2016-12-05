@@ -63,7 +63,7 @@ class CommonMiddleware(MiddlewareMixin):
             path = self.get_full_path_with_slash(request)
         else:
             path = request.get_full_path()
-
+        
         # Return a redirect if necessary
         if redirect_url or path != request.get_full_path():
             redirect_url += path
@@ -74,11 +74,11 @@ class CommonMiddleware(MiddlewareMixin):
         Return True if settings.APPEND_SLASH is True and appending a slash to
         the request path turns an invalid path into a valid one.
         """
-        if settings.APPEND_SLASH and not request.path_info.endswith('/'):
+        if settings.APPEND_SLASH and not request.raw_path_info.endswith('/'):
             urlconf = getattr(request, 'urlconf', None)
             return (
-                not is_valid_path(request.path_info, urlconf) and
-                is_valid_path('%s/' % request.path_info, urlconf)
+                not is_valid_path(request.raw_path_info, urlconf) and
+                is_valid_path('%s/' % request.raw_path_info, urlconf)
             )
         return False
 

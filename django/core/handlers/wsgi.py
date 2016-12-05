@@ -77,16 +77,22 @@ class LimitedStream(object):
 class WSGIRequest(http.HttpRequest):
     def __init__(self, environ):
         script_name = get_script_name(environ)
-        path_info = get_path_info(environ) or ''
+        self.raw_path_info = get_path_info(environ) or ''
         self.environ = environ
-        self.path_info = path_info
+        path_info = self.raw_path_info or '/'
         # be careful to only replace the first slash in the path because of
         # http://test/something and http://test//something being different as
         # stated in http://www.ietf.org/rfc/rfc2396.txt
+        self.path_info = path_info
+        if self.raw_path_info == '':
+            self.raw_path = script_name.rstrip('/')
+        else:
+            self.raw_path = '%s/%s' % (script_name.rstrip('/'),
+                               self.raw_path_info.replace('/', '', 1))
         self.path = '%s/%s' % (script_name.rstrip('/'),
                                path_info.replace('/', '', 1))
         self.META = environ
-        self.META['PATH_INFO'] = path_info
+        self.META['PATH_INFO'] = self.raw_path_info
         self.META['SCRIPT_NAME'] = script_name
         self.method = environ['REQUEST_METHOD'].upper()
         self.content_type, self.content_params = cgi.parse_header(environ.get('CONTENT_TYPE', ''))
@@ -105,6 +111,7 @@ class WSGIRequest(http.HttpRequest):
         self._stream = LimitedStream(self.environ['wsgi.input'], content_length)
         self._read_started = False
         self.resolver_match = None
+
 
     def _get_scheme(self):
         return self.environ.get('wsgi.url_scheme')

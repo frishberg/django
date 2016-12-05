@@ -40,3 +40,7 @@ def malformed_post(request):
 
 def httpstatus_enum(request):
     return HttpResponse(status=HTTPStatus.OK)
+
+
+def index(request):
+    return HttpResponse('Index')

@@ -302,7 +302,8 @@ class RequestFactory(object):
 
     def request(self, **request):
         "Construct a generic request object."
-        return WSGIRequest(self._base_environ(**request))
+        env = self._base_environ(**request)
+        return WSGIRequest(env)
 
     def _encode_data(self, data, content_type):
         if content_type is MULTIPART_CONTENT:
