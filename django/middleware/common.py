@@ -64,7 +64,8 @@ class CommonMiddleware(object):
             path = request.get_full_path()
 
         # Return a redirect if necessary
-        if redirect_url or path != request.get_full_path():
+        full_path = '' if request.path_info_is_empty else request.get_full_path()
+        if redirect_url or path != full_path:
             redirect_url += path
             return self.response_redirect_class(redirect_url)
 
